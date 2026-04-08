@@ -20,4 +20,4 @@
 
 ## 🚀 Getting Started
 1. WSL環境でこのリポジトリをクローンします。
-   git clone [https://github.com/your-username/repository-name.git](https://github.com/your-username/repository-name.git)
+   git clone [git@github.com:riririnn/AdvSoftwereG5.git](git@github.com:riririnn/AdvSoftwereG5.git)

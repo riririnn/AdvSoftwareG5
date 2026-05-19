@@ -1,6 +1,7 @@
 # 1. ベースイメージの選定
 # 添付資料の環境（Debian Bullseyeベースの32bit OS）に合わせて、Python 3.9のスリム版を使用
-FROM arm32v7/python:3.9-slim-bullseye
+# FROM arm32v7/python:3.9-slim-bullseye(WSLでは動かないため、通常のpython:3.9-slim-bullseyeを使用(RaspberryPi上でビルドする場合はarm32v7/python:3.9-slim-bullseyeを使用))
+FROM python:3.9-slim-bullseye
 
 # 環境変数の設定（Pythonがキャッシュを書き込まない、ログを即時出力するなど）
 ENV PYTHONDONTWRITEBYTECODE=1

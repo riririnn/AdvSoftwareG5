@@ -1,8 +1,8 @@
 #!/bin/bash
 
 # --- 設定項目 ---
-IMAGE_NAME="unmanned-sales-system:latest"
-CONTAINER_NAME="unmanned_sales_app"
+IMAGE_NAME="advsoftwareg5:latest"
+CONTAINER_NAME="advsoftwareg5_app"
 
 echo "========================================="
 echo " Starting Docker Container: ${CONTAINER_NAME}"

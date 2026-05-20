@@ -14,11 +14,12 @@
   
 ## 📂 Repository Structure
 * `/app`: メインのアプリケーションコード（WebAPI，IoT制御，AI推論など）
-* `/notebooks`: データ分析や機械学習モデルの実験用Jupyter Notebook
+* `/notebooks`: データ分析や機械学習モデルの実験用Jupyter Notebook (作ってないしなくてもいい)
 * `/docs`: 企画書，アーキテクチャ図，プレゼン資料
-* `.devcontainer`: VS Code用のDocker環境設定ファイル
+* `.devcontainer`: VS Code用のDocker環境設定ファイル(作る予定)
 * `/docker`: 環境構築用の `Dockerfile` が含まれるディレクトリ
 * `/scripts`: コンテナ起動用のシェルスクリプト (`start-container.sh`) が含まれるディレクトリ
+* `/instructions`: 個人が作ったそれぞれの機能について説明書を入れるところ(いらないかもしれない)
 
 ## 🚀 Getting Started
 
@@ -85,7 +86,7 @@
    ```
    (originリポジトリのfeature/camera-recognitionブランチの場合)
    git add .
-   git commit -m "カメラの画像認識処理の基本ロジックを追加"
+   git commit -m "何をしたか(what do)，何に対してか(waht purpose)"
    git push origin feature/camera-recognition
    ```
 

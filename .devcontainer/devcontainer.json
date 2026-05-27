@@ -1,0 +1,36 @@
+{
+  "name": "AdvSoftwareG5-DevEnvironment",
+  
+  // 参照するDockerfileのパスを指定
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+
+  // コンテナ内での作業ディレクトリ（DockerfileのWORKDIRと合わせる）
+  "workspaceFolder": "/workspace",
+
+  // コンテナ起動時に毎回実行するスクリプト（環境変数の自動読み込みやパッケージチェック）
+  "postCreateCommand": "bash .devcontainer/update-dependencies.sh",
+
+  // VS Codeの設定をチーム全員で統一する
+  "customizations": {
+    "vscode": {
+      // コンテナに入った時に自動でインストールされる拡張機能のリスト
+      "extensions": [
+        "ms-python.python",     // Python言語サポート（必須）
+        "ms-python.vscode-pylance", // コード補完・エラーチェック（必須）
+        "ms-azuretools.vscode-docker" // Docker管理
+      ],
+      // コンテナ内でのVS Codeの動作設定
+      "settings": {
+        "python.defaultInterpreterPath": "/usr/local/bin/python",
+        "python.analysis.typeCheckingMode": "basic",
+        "editor.formatOnSave": true
+      }
+    }
+  },
+
+  // ホストPCのユーザー権限とコンテナ内の権限を一致させる（ファイルの編集ロックを防ぐ）
+  "remoteUser": "root"
+}

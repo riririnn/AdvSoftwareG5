@@ -11,14 +11,14 @@
 * **Environment:** Ubuntu (WSL) / Docker (Dev Containers)
 * **Target Area:** IoT / AI
 * **Infrastructure:** Local Raspberry Pi (OS Lite 32bit / Debian Bullseyeベース)
+* **Web API:** Minimal Web System (Python標準ライブラリ `HTTPServer` 等を使用し、講義要件に完全準拠)
   
 ## 📂 Repository Structure
 * `/app`: メインのアプリケーションコード（WebAPI，IoT制御，AI推論など）
 * `/notebooks`: データ分析や機械学習モデルの実験用Jupyter Notebook (作ってないしなくてもいい)
 * `/docs`: 企画書，アーキテクチャ図，プレゼン資料
-* `.devcontainer`: VS Code用のDocker環境設定ファイル(作る予定)
-* `/docker`: 環境構築用の `Dockerfile` が含まれるディレクトリ
-* `/scripts`: コンテナ起動用のシェルスクリプト (`start-container.sh`) が含まれるディレクトリ
+* `.devcontainer`: VS Code用のDocker環境設定ファイル
+* `/scripts`: コンテナ起動用のシェルスクリプト (`start-container.sh`) が含まれるディレクトリ(使っていない)
 * `/instructions`: 個人が作ったそれぞれの機能について説明書を入れるところ(いらないかもしれない)
 
 ## 🚀 Getting Started
@@ -27,21 +27,11 @@
    ```bash
    git clone git@github.com:riririnn/AdvSoftwereG5.git 
    cd AdvSoftwereG5
-2. Dockerイメージのビルド
-   `docker/Dockerfile` には，GPIO・カメラ操作に必要な依存パッケージ（`libi2c-dev, v4l-utils`）と，AI推論用の軽量ライブラリ（`tflite-runtime, opencv-python-headless`）が含まれています．
-   以下のコマンドで，スクリプトに指定されている名前（`advsoftwareg5:latest`）でイメージをビルドします．
-   ```
-   docker build -t advsoftwareg5:latest -f docker/Dockerfile .
-   ```
-3. コンテナの起動
-   `scripts/start-container.sh`を使用してコンテナを起動します．
-   このスクリプトは，既存の`advsoftwareg5`コンテナが存在する場合は自動的に停止・削除し，ハードウェアデバイスへのアクセス権限（GPIO: `/dev/gpiomem`, SPI: `/dev/spidev0.0`, `/dev/spidev0.1`, カメラ: `/dev/video0`）を付与して起動します．
-   ```
-   # 実行権限の付与（初回のみ）
-   chmod +x scripts/start-container.sh
-   # スクリプトの実行
-   ./scripts/start-container.sh
-   ```
+2. VS Code で開き、コンテナを起動する
+VS Codeでプロジェクトのルートディレクトリを開くと、画面右下に「コンテナで再度開く (Reopen in Container)」というポップアップが表示されるのでクリックします。
+(※表示されない場合は、`Ctrl + Shift + P `でコマンドパレットを開き、`Dev Containers: Reopen in Container `を選択してください)
+3. 自動環境構築の完了を待つ
+VS Codeが自動的に `docker/Dockerfile `を読み込み、Gitの導入、リポジトリルートの `/workspace `へのマウント、および依存パッケージの初期化（`update-dependencies.sh `の実行）を行います。完了すると、コンテナ内のターミナルでそのままGit管理やPythonの実行が可能になります。
 
 ## 💻 Development (チーム開発の進め方)
 

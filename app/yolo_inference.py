@@ -26,19 +26,20 @@ CONFIG_YAML = Path(__file__).parent.parent / "ai" / "configs" / "vegetables.yaml
 
 
 def _load_class_names(config_path: Path = CONFIG_YAML):
-    """vegetables.yaml から id→英名 / 英名→日本語名 を読み込む。
+    """vegetables.yaml から id→英名 / 英名→日本語名 / 対象クラス名セット を読み込む。
 
-    返り値: (CLASS_NAMES: {id: en}, CLASS_NAMES_JA: {en: ja})
-    yaml が無い場合は空dictを返し、英名（YOLOモデル側のラベル）にフォールバックする。
+    返り値: (CLASS_NAMES: {id: en}, CLASS_NAMES_JA: {en: ja}, TARGET_NAMES: set[str])
+    yaml が無い場合は空を返し、モデル内蔵ラベルにフォールバックする。
     """
     if not config_path.exists():
         print(f"[Detector] 設定ファイル未検出: {config_path} → モデル内蔵ラベルを使用")
-        return {}, {}
+        return {}, {}, set()
     with open(config_path, encoding="utf-8") as f:
         cfg = yaml.safe_load(f)
     class_names = {int(k): v for k, v in (cfg.get("names") or {}).items()}
     class_names_ja = dict(cfg.get("names_ja") or {})
-    return class_names, class_names_ja
+    target_names = set(cfg.get("target_names") or class_names.values())
+    return class_names, class_names_ja, target_names
 
 
 def _build_colors(class_names: dict) -> dict:
@@ -51,7 +52,7 @@ def _build_colors(class_names: dict) -> dict:
     return colors
 
 
-CLASS_NAMES, CLASS_NAMES_JA = _load_class_names()
+CLASS_NAMES, CLASS_NAMES_JA, TARGET_NAMES = _load_class_names()
 
 
 @dataclass
@@ -108,14 +109,19 @@ class VegetableDetector:
         )
 
         detections: list[Detection] = []
-        counts: dict[str, int] = {name: 0 for name in CLASS_NAMES.values()}
+        # 集計は target_names の4種のみ（他の26クラスは無視）
+        counts: dict[str, int] = {name: 0 for name in TARGET_NAMES}
 
         for r in results:
             for box in r.boxes:
                 class_id = int(box.cls[0])
                 class_name = CLASS_NAMES.get(class_id, f"class_{class_id}")
-                confidence = float(box.conf[0])
 
+                # 対象外クラスはスキップ
+                if TARGET_NAMES and class_name not in TARGET_NAMES:
+                    continue
+
+                confidence = float(box.conf[0])
                 x1, y1, x2, y2 = box.xyxy[0].tolist()
                 cx = (x1 + x2) / 2
                 cy = (y1 + y2) / 2
@@ -135,8 +141,7 @@ class VegetableDetector:
                         },
                     )
                 )
-                if class_name in counts:
-                    counts[class_name] += 1
+                counts[class_name] += 1
 
         return InferenceResult(
             timestamp=time.time(),

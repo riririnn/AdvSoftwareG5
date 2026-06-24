@@ -1,0 +1,2 @@
+ai/dataset/*
+!ai/dataset/data.yaml

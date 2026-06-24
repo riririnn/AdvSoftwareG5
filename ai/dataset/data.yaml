@@ -1,0 +1,12 @@
+train: train/images
+val: train/images   # valid/ が存在しないため train で代用（学習確認用）
+
+nc: 26
+names: ['avocado', 'beans', 'beet', 'bell pepper', 'broccoli', 'brus capusta', 'cabbage', 'carrot', 'cayliflower', 'celery', 'corn', 'cucumber', 'eggplant', 'fasol', 'garlic', 'hot pepper', 'onion', 'peas', 'potato', 'pumpkin', 'rediska', 'redka', 'salad', 'squash-patisson', 'tomato', 'vegetable marrow']
+
+roboflow:
+  workspace: test-on9hk
+  project: vegetables-kacga
+  version: 3
+  license: CC BY 4.0
+  url: https://universe.roboflow.com/test-on9hk/vegetables-kacga/dataset/3

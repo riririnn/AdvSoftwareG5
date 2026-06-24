@@ -12,18 +12,49 @@ path: ../dataset          # dataset root (ai/dataset)
 train: images/train
 val: images/val
 
-# クラス定義 (id: 英語名)  ※現在は確定済みの4種。将来ここに追記して10種程度まで拡張予定
-nc: 4
+# クラス定義 (id: 英語名)
+# ★ Roboflow データセット (vegetables-kacga v3, 26クラス) のIDに合わせている ★
+# 学習は data.yaml (26クラス全体) で行い、推論時にここの4種だけ表示・集計する。
+nc: 26
 names:
-  0: tomato      # トマト
-  1: cucumber    # きゅうり
-  2: eggplant    # なす
-  3: pepper      # ピーマン
+  0: avocado
+  1: beans
+  2: beet
+  3: bell pepper   # ピーマン
+  4: broccoli
+  5: brus capusta
+  6: cabbage
+  7: carrot
+  8: cayliflower
+  9: celery
+  10: corn
+  11: cucumber     # きゅうり
+  12: eggplant     # なす
+  13: fasol
+  14: garlic
+  15: hot pepper
+  16: onion
+  17: peas
+  18: potato
+  19: pumpkin
+  20: rediska
+  21: redka
+  22: salad
+  23: squash-patisson
+  24: tomato       # トマト
+  25: vegetable marrow
 
-# 日本語表示名 (英語名: 日本語)  ※本プロジェクト独自キー。ultralytics は無視する。
-# yolo_inference.py の描画・ログ表示で使用。未定義の場合は英語名がそのまま使われる。
+# 推論時に表示・集計する対象クラス（4種のみ）
+# yolo_inference.py はここを参照して他クラスを無視する
+target_names:
+  - tomato
+  - cucumber
+  - eggplant
+  - bell pepper
+
+# 日本語表示名 ※本プロジェクト独自キー。ultralytics は無視する。
 names_ja:
   tomato: トマト
   cucumber: きゅうり
   eggplant: なす
-  pepper: ピーマン
+  bell pepper: ピーマン

@@ -4,6 +4,10 @@ echo "========================================="
 echo " 同期中: DevContainer 開発環境チェック"
 echo "========================================="
 
+# コンテナ内のユーザー(root)とホストのファイル所有者が異なる場合に
+# git が "dubious ownership" エラーを出すのを防ぐ
+git config --global --add safe.directory /workspace
+
 # パッケージの不足がないか、コンテナ起動時に念のため確認
 pip install --no-cache-dir opencv-python-headless tflite-runtime
 

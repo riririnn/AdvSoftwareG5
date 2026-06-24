@@ -18,9 +18,10 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     v4l-utils \
     libgl1-mesa-glx \
     libglib2.0-0 \
-    git \ 
+    git \
     # Gitはソースコード管理のためにインストール（ Raspberry Pi 実行時には削除するか，RasPi専用のイメージを作成して Git を含めないようにすることも検討可能 )
     openssh-client \
+    tmux \
     # OpenSSHクライアントは、リモートデバッグやコードのリモート管理に便利ですが、セキュリティ上の理由から、必要に応じてインストールするかどうかを検討してください。
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*

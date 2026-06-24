@@ -1,28 +1,40 @@
 {
   "name": "AdvSoftwareG5-DevEnvironment",
-  
-  // 参照するDockerfileのパスを指定
+
   "build": {
     "dockerfile": "Dockerfile",
     "context": ".."
   },
 
-  // コンテナ内での作業ディレクトリ（DockerfileのWORKDIRと合わせる）
   "workspaceFolder": "/workspace",
 
-  // コンテナ起動時に毎回実行するスクリプト（環境変数の自動読み込みやパッケージチェック）
-  "postCreateCommand": "bash .devcontainer/update-dependencies.sh",
+  // ホストの ~/.claude をマウント → コンテナ再起動後もClaude履歴・設定が維持される
+  // ホストの ~/.gitconfig をマウント → コンテナ内でgit操作時にユーザー情報が引き継がれる
+  "mounts": [
+    "source=${localEnv:HOME}/.claude,target=/root/.claude,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.gitconfig,target=/root/.gitconfig,type=bind,consistency=cached"
+  ],
 
-  // VS Codeの設定をチーム全員で統一する
+  // postCreateCommand:
+  //   1. 依存パッケージチェック
+  //   2. git safe.directory を設定（rootユーザーとファイル所有者の違いによるgit拒否を回避）
+  "postCreateCommand": "bash .devcontainer/update-dependencies.sh && git config --global --add safe.directory /workspace",
+
   "customizations": {
     "vscode": {
-      // コンテナに入った時に自動でインストールされる拡張機能のリスト
+      // ホストにインストール済みの拡張機能をコンテナでも使えるようにする
       "extensions": [
-        "ms-python.python",     // Python言語サポート（必須）
-        "ms-python.vscode-pylance", // コード補完・エラーチェック（必須）
-        "ms-azuretools.vscode-docker" // Docker管理
+        "anthropic.claude-code",
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.debugpy",
+        "ms-python.vscode-python-envs",
+        "ms-azuretools.vscode-docker",
+        "ms-azuretools.vscode-containers",
+        "ms-ceintl.vscode-language-pack-ja",
+        "mechatroner.rainbow-csv",
+        "yzhang.markdown-all-in-one"
       ],
-      // コンテナ内でのVS Codeの動作設定
       "settings": {
         "python.defaultInterpreterPath": "/usr/local/bin/python",
         "python.analysis.typeCheckingMode": "basic",
@@ -31,6 +43,5 @@
     }
   },
 
-  // ホストPCのユーザー権限とコンテナ内の権限を一致させる（ファイルの編集ロックを防ぐ）
   "remoteUser": "root"
 }

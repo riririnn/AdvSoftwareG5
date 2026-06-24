@@ -1,14 +1,29 @@
 # YOLOv8 データセット設定ファイル
 # ultralytics形式: https://docs.ultralytics.com/datasets/
+#
+# ★野菜を追加するときは、このファイルだけ編集すればよい★
+#   1. nc を実際のクラス数に合わせる
+#   2. names に「id: 英語名」を連番(0始まり)で追加
+#   3. names_ja に「英語名: 日本語表示名」を追加（推論結果の表示用・本プロジェクト独自キー）
+#   4. dataset/labels のアノテーションも同じ id を使う
+# yolo_inference.py / train.py はここを読み込むのでコード側の修正は不要。
 
 path: ../dataset          # dataset root (ai/dataset)
 train: images/train
 val: images/val
 
-# クラス定義 (id: 名前)
+# クラス定義 (id: 英語名)  ※現在は確定済みの4種。将来ここに追記して10種程度まで拡張予定
 nc: 4
 names:
   0: tomato      # トマト
   1: cucumber    # きゅうり
   2: eggplant    # なす
   3: pepper      # ピーマン
+
+# 日本語表示名 (英語名: 日本語)  ※本プロジェクト独自キー。ultralytics は無視する。
+# yolo_inference.py の描画・ログ表示で使用。未定義の場合は英語名がそのまま使われる。
+names_ja:
+  tomato: トマト
+  cucumber: きゅうり
+  eggplant: なす
+  pepper: ピーマン

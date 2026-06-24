@@ -4,6 +4,7 @@ YOLOリアルタイム推論・集計モジュール（タスク3）
 種類ごとの個数をリアルタイムで集計する。
 結果はJSONで出力可能（重量センサー担当・万引き検知担当との連携用）。
 """
+import colorsys
 import json
 import time
 from dataclasses import dataclass, field, asdict
@@ -12,6 +13,7 @@ from typing import Callable
 
 import cv2
 import numpy as np
+import yaml
 from ultralytics import YOLO
 
 from camera_capture import CameraCapture
@@ -19,18 +21,37 @@ from camera_capture import CameraCapture
 DEFAULT_WEIGHTS = Path(__file__).parent.parent / "ai" / "runs" / "vegetables_v1" / "weights" / "best.pt"
 FALLBACK_WEIGHTS = "yolov8n.pt"   # 学習済み重みがない場合の仮モデル
 
-CLASS_NAMES = {
-    0: "tomato",
-    1: "cucumber",
-    2: "eggplant",
-    3: "pepper",
-}
-CLASS_NAMES_JA = {
-    "tomato": "トマト",
-    "cucumber": "きゅうり",
-    "eggplant": "なす",
-    "pepper": "ピーマン",
-}
+# クラス定義は ai/configs/vegetables.yaml に一元化（野菜の追加はyaml編集のみで済む）
+CONFIG_YAML = Path(__file__).parent.parent / "ai" / "configs" / "vegetables.yaml"
+
+
+def _load_class_names(config_path: Path = CONFIG_YAML):
+    """vegetables.yaml から id→英名 / 英名→日本語名 を読み込む。
+
+    返り値: (CLASS_NAMES: {id: en}, CLASS_NAMES_JA: {en: ja})
+    yaml が無い場合は空dictを返し、英名（YOLOモデル側のラベル）にフォールバックする。
+    """
+    if not config_path.exists():
+        print(f"[Detector] 設定ファイル未検出: {config_path} → モデル内蔵ラベルを使用")
+        return {}, {}
+    with open(config_path, encoding="utf-8") as f:
+        cfg = yaml.safe_load(f)
+    class_names = {int(k): v for k, v in (cfg.get("names") or {}).items()}
+    class_names_ja = dict(cfg.get("names_ja") or {})
+    return class_names, class_names_ja
+
+
+def _build_colors(class_names: dict) -> dict:
+    """クラス数に応じてBGR色を動的生成（任意クラス数で破綻しない）。"""
+    colors = {}
+    n = max(len(class_names), 1)
+    for i, name in enumerate(class_names.values()):
+        r, g, b = colorsys.hsv_to_rgb(i / n, 0.85, 1.0)
+        colors[name] = (int(b * 255), int(g * 255), int(r * 255))  # OpenCVはBGR
+    return colors
+
+
+CLASS_NAMES, CLASS_NAMES_JA = _load_class_names()
 
 
 @dataclass
@@ -45,6 +66,8 @@ class Detection:
 class InferenceResult:
     timestamp: float
     detections: list[Detection] = field(default_factory=list)
+    # AIが検出した個数（参考値）。野菜はかごに山積みで遮蔽されるため不正確になりうる。
+    # 在庫の確定個数は重量センサー（三井担当）側で算出し、本値は種類特定の補助とする。
     counts: dict[str, int] = field(default_factory=dict)  # {"tomato": 2, ...}
 
     def to_json(self) -> str:
@@ -124,12 +147,7 @@ class VegetableDetector:
     def draw(self, frame: np.ndarray, result: InferenceResult) -> np.ndarray:
         """検出結果をフレームに描画して返す（デバッグ・プレビュー用）。"""
         vis = frame.copy()
-        COLORS = {
-            "tomato":   (0, 0, 255),
-            "cucumber": (0, 255, 0),
-            "eggplant": (128, 0, 128),
-            "pepper":   (0, 165, 255),
-        }
+        COLORS = _build_colors(CLASS_NAMES)
         for det in result.detections:
             b = det.bbox
             color = COLORS.get(det.class_name, (200, 200, 200))

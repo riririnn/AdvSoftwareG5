@@ -1,0 +1,14 @@
+# YOLOv8 データセット設定ファイル
+# ultralytics形式: https://docs.ultralytics.com/datasets/
+
+path: ../dataset          # dataset root (ai/dataset)
+train: images/train
+val: images/val
+
+# クラス定義 (id: 名前)
+nc: 4
+names:
+  0: tomato      # トマト
+  1: cucumber    # きゅうり
+  2: eggplant    # なす
+  3: pepper      # ピーマン

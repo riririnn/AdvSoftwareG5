@@ -6,7 +6,9 @@
       "Read(//home/rin/.ssh/**)",
       "Bash(ssh -T git@github.com)",
       "Bash(grep -n \"ssh-agent\" ~/.bashrc)",
-      "Read(//home/rin/**)"
+      "Read(//home/rin/**)",
+      "Bash(cat /workspace/.devcontainer/devcontainer.json | grep -A5 \"mounts\" && echo \"---\" && ls -la /root/.tmux.conf 2>/dev/null || echo \".tmux.conf なし\")",
+      "Read(//root/**)"
     ]
   }
 }

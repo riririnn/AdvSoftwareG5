@@ -17,7 +17,8 @@
   ],
 
   "mounts": [
-    "source=${localEnv:HOME}/.claude,target=/root/.claude,type=bind,consistency=cached"
+    "source=${localEnv:HOME}/.claude,target=/root/.claude,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.tmux.conf,target=/root/.tmux.conf,type=bind,consistency=cached"
   ],
 
   // コンテナ起動・再起動のたびに実行

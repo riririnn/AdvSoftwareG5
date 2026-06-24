@@ -3,8 +3,10 @@
     "allow": [
       "Bash(git -C /home/rin/AdvSoftwereG5 status)",
       "Bash(git -C /home/rin/AdvSoftwereG5 branch)",
-      "Bash(git -C /workspace config pull.rebase false)",
-      "Bash(git -C /workspace log --oneline -3)"
+      "Read(//home/rin/.ssh/**)",
+      "Bash(ssh -T git@github.com)",
+      "Bash(grep -n \"ssh-agent\" ~/.bashrc)",
+      "Read(//home/rin/**)"
     ]
   }
 }

@@ -8,6 +8,14 @@
 
   "workspaceFolder": "/workspace",
 
+  // シェルスクリプトの docker run オプションに相当する設定
+  "runArgs": [
+    "--gpus", "all",
+    "--cap-add=SYS_PTRACE",
+    "--security-opt", "seccomp=unconfined",
+    "--ipc=host"
+  ],
+
   "mounts": [
     "source=${localEnv:HOME}/.claude,target=/root/.claude,type=bind,consistency=cached"
   ],

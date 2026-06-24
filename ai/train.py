@@ -14,6 +14,7 @@ ultralytics YOLOv8 を使用。
 import argparse
 from pathlib import Path
 
+import torch
 import yaml
 from ultralytics import YOLO
 
@@ -109,7 +110,7 @@ def train(data_yaml: Path = DEFAULT_CONFIG_YAML):
         project=str(PROJECT_DIR),
         name=RUN_NAME,
         exist_ok=True,
-        device="cpu",   # ラズパイはCPU。GPU環境なら "0" に変更
+        device="0" if torch.cuda.is_available() else "cpu",
         workers=2,
         **AUGMENT_PARAMS,
     )

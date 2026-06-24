@@ -8,7 +8,8 @@
       "Bash(grep -n \"ssh-agent\" ~/.bashrc)",
       "Read(//home/rin/**)",
       "Bash(cat /workspace/.devcontainer/devcontainer.json | grep -A5 \"mounts\" && echo \"---\" && ls -la /root/.tmux.conf 2>/dev/null || echo \".tmux.conf なし\")",
-      "Read(//root/**)"
+      "Read(//root/**)",
+      "Bash(python -c \"import torch; print\\('CUDA:', torch.cuda.is_available\\(\\)\\); print\\('Device count:', torch.cuda.device_count\\(\\)\\)\")"
     ]
   }
 }

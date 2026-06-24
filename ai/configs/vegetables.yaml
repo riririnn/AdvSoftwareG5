@@ -8,9 +8,9 @@
 #   4. dataset/labels のアノテーションも同じ id を使う
 # yolo_inference.py / train.py はここを読み込むのでコード側の修正は不要。
 
-path: ../dataset          # dataset root (ai/dataset)
-train: images/train
-val: images/val
+path: ../ai/dataset       # dataset root (ai/dataset)
+train: train/images
+val: train/images         # valセットなし、trainで代用
 
 # クラス定義 (id: 英語名)
 # ★ Roboflow データセット (vegetables-kacga v3, 26クラス) のIDに合わせている ★

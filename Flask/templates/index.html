@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>無人販売支援システム 管理画面</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header>
+        <h1>無人販売支援システム 管理画面</h1>
+        <p>在庫・売上・通知状況を確認する画面</p>
+    </header>
+
+    <main>
+        <section class="card">
+            <h2>現在の在庫</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>商品名</th>
+                        <th>在庫数</th>
+                    </tr>
+                </thead>
+                <tbody id="inventory-table">
+                    {% for item, count in inventory.items() %}
+                    <tr>
+                        <td>{{ item }}</td>
+                        <td>{{ count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+
+        <section class="card">
+            <h2>売上履歴</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>時刻</th>
+                        <th>商品名</th>
+                        <th>個数</th>
+                        <th>金額</th>
+                    </tr>
+                </thead>
+                <tbody id="sales-table">
+                    {% for sale in sales_history %}
+                    <tr>
+                        <td>{{ sale.time }}</td>
+                        <td>{{ sale.item_name }}</td>
+                        <td>{{ sale.quantity }}</td>
+                        <td>{{ sale.amount }} 円</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+
+        <section class="card">
+            <h2>動作テスト</h2>
+            <button onclick="sendTestPurchase()">購入通知テスト</button>
+            <button class="danger" onclick="sendTestShoplifting()">万引き通知テスト</button>
+        </section>
+    </main>
+
+    <script>
+        async function updateInventory() {
+            const response = await fetch("/api/inventory");
+            const inventory = await response.json();
+
+            const table = document.getElementById("inventory-table");
+            table.innerHTML = "";
+
+            for (const [item, count] of Object.entries(inventory)) {
+                table.innerHTML += `
+                    <tr>
+                        <td>${item}</td>
+                        <td>${count}</td>
+                    </tr>
+                `;
+            }
+        }
+
+        async function updateSales() {
+            const response = await fetch("/api/sales");
+            const sales = await response.json();
+
+            const table = document.getElementById("sales-table");
+            table.innerHTML = "";
+
+            for (const sale of sales) {
+                table.innerHTML += `
+                    <tr>
+                        <td>${sale.time}</td>
+                        <td>${sale.item_name}</td>
+                        <td>${sale.quantity}</td>
+                        <td>${sale.amount} 円</td>
+                    </tr>
+                `;
+            }
+        }
+
+        async function sendTestPurchase() {
+            await fetch("/api/purchase", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    item_name: "Tomato",
+                    quantity: 2,
+                    amount: 300
+                })
+            });
+
+            updateInventory();
+            updateSales();
+        }
+
+        async function sendTestShoplifting() {
+            await fetch("/api/shoplifting", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    item_name: "Tomato",
+                    quantity: 2,
+                    shortage_amount: 300
+                })
+            });
+        }
+
+        setInterval(() => {
+            updateInventory();
+            updateSales();
+        }, 5000);
+    </script>
+</body>
+</html>

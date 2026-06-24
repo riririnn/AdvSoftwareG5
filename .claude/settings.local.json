@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "Bash(git -C /home/rin/AdvSoftwereG5 status)",
-      "Bash(git -C /home/rin/AdvSoftwereG5 branch)"
+      "Bash(git -C /home/rin/AdvSoftwereG5 branch)",
+      "Bash(git -C /workspace config pull.rebase false)",
+      "Bash(git -C /workspace log --oneline -3)"
     ]
   }
 }

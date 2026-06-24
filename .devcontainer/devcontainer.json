@@ -8,21 +8,17 @@
 
   "workspaceFolder": "/workspace",
 
-  // ホストの ~/.claude をマウント → コンテナ再起動後もClaude履歴・設定が維持される
-  // ホストの ~/.gitconfig をマウント → コンテナ内でgit操作時にユーザー情報が引き継がれる
   "mounts": [
-    "source=${localEnv:HOME}/.claude,target=/root/.claude,type=bind,consistency=cached",
-    "source=${localEnv:HOME}/.gitconfig,target=/root/.gitconfig,type=bind,consistency=cached"
+    "source=${localEnv:HOME}/.claude,target=/root/.claude,type=bind,consistency=cached"
   ],
 
-  // postCreateCommand:
-  //   1. 依存パッケージチェック
-  //   2. git safe.directory を設定（rootユーザーとファイル所有者の違いによるgit拒否を回避）
-  "postCreateCommand": "bash .devcontainer/update-dependencies.sh && git config --global --add safe.directory /workspace",
+  // コンテナ起動・再起動のたびに実行
+  "postStartCommand": "git config --global --add safe.directory ${containerWorkspaceFolder} && find /workspace/.claude/worktrees -name '.git' -delete 2>/dev/null; git -C /workspace worktree prune 2>/dev/null; true",
+
+  "postCreateCommand": "bash .devcontainer/update-dependencies.sh",
 
   "customizations": {
     "vscode": {
-      // ホストにインストール済みの拡張機能をコンテナでも使えるようにする
       "extensions": [
         "anthropic.claude-code",
         "ms-python.python",

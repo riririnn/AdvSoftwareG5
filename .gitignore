@@ -1,3 +1,5 @@
 ai/dataset/*
 !ai/dataset/data.yaml
 .claude/worktrees/
+*.png
+*.jpg

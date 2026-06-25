@@ -1,5 +1,21 @@
 ai/dataset/*
 !ai/dataset/data.yaml
-.claude/worktrees/
+.claude/
 *.png
 *.jpg
+
+# Pythonキャッシュ
+__pycache__/
+*.pyc
+*.pyo
+
+# YOLOモデル重みファイル（大容量のためgit管理外）
+*.pt
+*.onnx
+
+# 学習出力（ログ・チェックポイント）
+ai/runs/
+runs/
+
+# 作業メモ
+.devcontainer/todo.md

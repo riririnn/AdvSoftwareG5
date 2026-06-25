@@ -48,5 +48,8 @@
     }
   },
 
-  "remoteUser": "root"
+  "remoteUser": "root",
+
+  // ポートフォワーディング: コンテナの8080をホスト(Ubuntu)経由でWindowsに公開
+  "forwardPorts": [8080]
 }

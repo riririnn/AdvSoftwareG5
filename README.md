@@ -1,180 +1,157 @@
-# Advanced Software Engineering - Team Project (G5)
+# Advanced Software Engineering - Team Project
 
-応用ソフトウェア工学のPBL（プロジェクトベース学習）チーム開発リポジトリ。  
-無人販売所における野菜の認識・購入検知・万引き検知システムを構築する。
+応用ソフトウェア工学のPBL（プロジェクトベース学習）におけるチーム開発用リポジトリです．
 
----
+## 🎯 Project Goal
+- 無人販売におけるお金の支払い問題を手助けするシステムを構築します．
+- Raspberry PiのGPIO・SPI通信を用いたセンサー制御（磁気・重量）と，カメラを用いたAI画像認識（お金の枚数計算・野菜のラベリング分類）を組み合わせ，購入や万引きの認識と外部への通知を自動化します．
 
-## システム概要
+## 🛠 Tech Stack & Environment
+* **Language:** Python 3.9
+* **Environment:** Ubuntu (SSH接続) / Docker (Dev Containers)
+* **Target Area:** IoT / AI
+* **Infrastructure:** Local Raspberry Pi (OS Lite 32bit / Debian Bullseyeベース)
+* **Web API:** Minimal Web System (Python標準ライブラリ `HTTPServer` 等を使用し、講義要件に完全準拠)
+* **AI:** YOLOv8 (ultralytics) / 学習環境: NVIDIA GPU (CUDA 12.8)
 
-カメラ映像でYOLOv8による野菜認識を行い、重量センサーと照合することで購入・万引きを判定し、外部へ通知する。
+## 📂 Repository Structure
+* `/app`: メインのアプリケーションコード（WebAPI，IoT制御，AI推論など）
+* `/ai`: AI認識モジュール（学習・推論・データセット・設定）→ 詳細は [ai/README.md](ai/README.md)
+* `/docs`: 企画書，アーキテクチャ図，プレゼン資料
+* `.devcontainer`: VS Code用のDocker環境設定ファイル（GPU対応済み）
+* `/scripts`: コンテナ起動用のシェルスクリプト (`start-container.sh`) が含まれるディレクトリ(使っていない)
 
-```
-カメラ映像
-    │
-    ▼
-[app/camera_capture.py]  ← フレーム取得・防犯画像保存
-    │ numpy配列
-    ▼
-[app/yolo_inference.py]  ← リアルタイム推論・個数集計
-    │ InferenceResult (JSON)
-    ▼
-[app/main.py]            ← 重量センサーとの照合・万引き判定
-    │
-    ├─ 正常購入 → [app/web_client.py] → POST /update_sales
-    └─ 異常検知 → アラート送信
+## 🚀 Getting Started
 
-[app/web_server.py]      ← GET /status, POST /update_sales
-[ai/inference.py]        ← 単発推論API（外部から画像を受け取る窓口）
-```
-
----
-
-## ディレクトリ構成
-
-```
-/
-├── app/
-│   ├── main.py              # システム統括・万引き判定ロジック
-│   ├── camera_capture.py    # カメラ映像取得・フレームストリーミング
-│   ├── yolo_inference.py    # リアルタイム推論・バウンディングボックス描画
-│   ├── web_server.py        # 軽量HTTPサーバー（標準ライブラリのみ）
-│   └── web_client.py        # 外部へのPOST通知クライアント
-├── ai/
-│   ├── README.md            # AIモジュールの詳細ドキュメント
-│   ├── train.py             # YOLOv8学習スクリプト
-│   ├── inference.py         # 推論→JSON変換モジュール
-│   ├── configs/
-│   │   └── vegetables.yaml  # クラス定義・対象野菜設定
-│   ├── dataset/             # Roboflowデータセット
-│   └── runs/                # 学習済みモデル・ログ出力先
-├── docs/                    # 設計資料・企画書
-├── scripts/
-│   └── start-container.sh   # コンテナ起動スクリプト（ラズパイ用）
-└── .devcontainer/           # VS Code DevContainer設定
-    ├── Dockerfile
-    ├── devcontainer.json
-    └── update-dependencies.sh
-```
-
----
-
-## 主要モジュールの役割
-
-### app/camera_capture.py
-OpenCVを用いてカメラ映像を取得し、フレームごとにコールバックへ渡す。
-
-- `CameraCapture.stream(callback)` : フレームを連続取得してコールバックに渡す
-- `CameraCapture.save_evidence(frame)` : 防犯用タイムスタンプ付き画像を `ai/collected_images/` に保存
-
-### app/yolo_inference.py
-リアルタイム推論・集計・描画を担う中核モジュール。
-
-- `VegetableDetector.infer(frame)` : 1フレームを推論し `InferenceResult` を返す
-- `InferenceResult.to_json()` : 重量センサー担当・万引き検知担当との連携用JSON
-- 対象4種（トマト・きゅうり・なす・ピーマン）のみ集計し、他クラスは無視
-
-### ai/inference.py
-単発推論専用の軽量モジュール。Webエンドポイントやスクリプトから呼び出す。
-
-```python
-from ai.inference import load_model, predict
-model = load_model()
-result = predict(model, "image.jpg")  # dict形式でJSONが返る
-```
-
-詳細は [ai/README.md](ai/README.md) を参照。
-
-### app/web_server.py
-Python標準ライブラリのみで実装した軽量HTTPサーバー。
-
-| エンドポイント | メソッド | 内容 |
-|---|---|---|
-| `/status` | GET | 売上カウント・最新イベントをJSON返却 |
-| `/update_sales` | POST | 売上データを受け取り内部ステータスを更新 |
-
-### app/web_client.py
-`urllib` のみを使用した外部通知クライアント。
-
-- `send_notification(message)` : 購入イベント・アラートをPOSTで送信
-
----
-
-## 開発環境のセットアップ
-
-### 必要なもの
-- Ubuntu（WSLまたはSSH接続）
-- Docker + NVIDIA Container Toolkit（GPU使用時）
-- VS Code + Dev Containers拡張
-
-### 起動手順
-
-1. リポジトリをクローン
+1. **リポジトリのクローン**
    ```bash
-   git clone git@github.com:riririnn/AdvSoftwereG5.git
+   git clone git@github.com:riririnn/AdvSoftwereG5.git 
    cd AdvSoftwereG5
    ```
+2. VS Code で開き、コンテナを起動する
+VS Codeでプロジェクトのルートディレクトリを開くと、画面右下に「コンテナで再度開く (Reopen in Container)」というポップアップが表示されるのでクリックします。
+(※表示されない場合は、`Ctrl + Shift + P `でコマンドパレットを開き、`Dev Containers: Reopen in Container `を選択してください)
+3. 自動環境構築の完了を待つ
+VS Codeが自動的に `.devcontainer/Dockerfile` を読み込み、Gitの導入、リポジトリルートの `/workspace` へのマウント、および依存パッケージの初期化（`update-dependencies.sh` の実行）を行います。完了すると、コンテナ内のターミナルでそのままGit管理やPythonの実行が可能になります。
 
-2. VS Codeで開き「Reopen in Container」を選択  
-   （コマンドパレット: `Ctrl+Shift+P` → `Dev Containers: Reopen in Container`）
+> ⚠️ **GPU環境について**: DevContainerはNVIDIA GPU対応済みです（`--gpus all`）。ホスト側に `nvidia-container-toolkit` がインストールされている必要があります。
 
-3. コンテナが起動したら学習を実行
+## 💻 Development (チーム開発の進め方)
+
+本プロジェクトでは，ハードウェア（Raspberry Pi）とソフトウェア（AI/Web）の開発を効率よく進めるため，「手元のPCで開発 ➔ GitHubで共有 ➔ ラズパイで実機テスト」 というフローを採用しています．
+
+### Step 1: 手元のPC（WSL）でのコード実装
+
+各メンバーは，基本的に自身のPC上でコード（PythonスクリプトやDockerfile等）の編集を行います．
+
+1. 最新のコードを取得する
+
+   作業を始める前に，必ずリモートの最新状態を反映させます．
+
    ```bash
-   python ai/train.py --data ai/dataset/data.yaml
+   git pull origin main
    ```
 
-### GPU環境（devcontainer.json）
+2. 作業用ブランチを作成する
 
-`runArgs` に以下が設定済みで、コンテナ内からホストのNVIDIA GPUを使用できる。
+   直接 `main` ブランチを編集せず，機能ごとにブランチを切って作業します（例: カメラ機能の実装）．
 
-```json
-"--gpus", "all",
-"--cap-add=SYS_PTRACE",
-"--security-opt", "seccomp=unconfined",
-"--ipc=host"
-```
+   ```bash
+   git checkout -b feature/camera-recognition
+   ```
 
----
+3. VS Code + Dev Containers で開発する（ガチで推奨）
 
-## チーム開発フロー
+   VS Codeでフォルダを開き，右下のポップアップまたはコマンドパレットから Reopen in Container を選択します．これにより，コンテナ内のPython環境がVS Codeに認識され，構文エラーのチェックや自動補完が効くようになります．
 
-1. `git pull` で最新を取得
-2. `git checkout -b feature/xxx` でブランチを作成
-3. DevContainer内で実装・テスト
-4. `git push` → GitHub上でPRを作成 → `main` にマージ
-5. ラズパイで `git pull` して実機テスト
+   ⚠️ 注意: 手元のPCにはセンサーやカメラが繋がっていないため，ハードウェア依存のコードをテストする際はダミーデータを用意するか，実機テストで行います．
 
----
+### Step 2-1: GitHub への共有（ブランチ内でのコード管理）
 
-## 既知の課題と今後のタスク
+誰かとブランチを共有して開発を行っている場合はこまめにcommit，push，pullを行い，開発状況を共有してください．
 
-### AI認識精度
+またコンフリクトが極力起きないように同じ個所を同時に編集しないように心がけてください(編集する場合は本当にこまめにプッシュを行うように)
 
-| 課題 | 状況 | 対策 |
-|---|---|---|
-| 誤検出・検出漏れが多い | 現在 `yolov8n`（最軽量）使用中 | `yolov8s` または `yolov8m` へ切り替え・再学習 |
-| 実環境との乖離 | 公開データセットのみで学習 | 実販売台で画像収集して追加学習 |
-| ラズパイでの動作未確認 | GPU環境のみ検証済み | `yolov8n + imgsz=320` で速度検証が必要 |
+※VScode上の拡張機能で管理することをおすすめします．
 
-### Webシステム
+1. 変更をコミットしてプッシュする ( local → remote )
 
-| 課題 | 状況 | 対策 |
-|---|---|---|
-| 画像受信エンドポイントなし | `/predict` が未実装 | `web_server.py` に `POST /predict` を追加 |
-| リアルタイム推論との連携なし | `yolo_inference.py` とWebが独立 | `main.py` でスレッド統合が必要 |
-| 動画ストリーム未対応 | 静止画のみ | フレーム分割して逐次推論する仕組みが必要 |
+   ```
+   (originリポジトリのfeature/camera-recognitionブランチの場合)
+   git add .
+   git commit -m "何をしたか(what do)，何に対してか(waht purpose)"
+   git push origin feature/camera-recognition
+   ```
 
-### システム統合
+2. ほかの人の変更を自分のコードに適用する( remote → local )
 
-| 課題 | 状況 | 対策 |
-|---|---|---|
-| 重量センサーとの照合未実装 | `check_purchase_or_theft()` はスタブのみ | センサー担当と連携して実装 |
-| カメラなし環境でのテスト困難 | ハードウェア依存 | ダミーフレーム注入によるテスト機構が必要 |
-| `app/` の import パスがローカル依存 | `from camera_capture import` 等 | `app/` をパッケージ化するか実行ディレクトリを統一 |
+   ```
+   (おすすめ)git pull --rebase
+   もしくは git pull 
+   ```
 
----
+### Step 2-2: GitHub 上で作業ブランチを `main` へ統合する（Webで行う場合）
 
-## 関連ドキュメント
+この動作は作業ブランチでの編集がすべて完了し，機能が完成した場合などに行ってください．
 
-- [ai/README.md](ai/README.md) : AIモジュール（学習・推論）の詳細
-- [docs/app.md](docs/app.md) : Webシステム設計資料
+PCでプッシュした作業ブランチのコードを，プロジェクトの正規コード（`main` ブランチ）へと統合します．この作業は GitHubのウェブ画面で行います．
+
+1. GitHubのリポジトリ画面を開く
+
+   ブラウザでGitHubにアクセスすると，画面上部に「feature/camera-fix had recent pushes...」という黄色いバーが表示されるので，その横にある [Compare & pull request] ボタンを押します．
+
+2. Pull Request (PR) を作成する
+
+   変更内容のタイトルやメモを記入し，画面右下の [Create pull request] ボタンを押します．
+
+3. コードを統合（マージ）する
+
+   画面が切り替わり，自動で競合（コンフリクト）のチェックが行われます．問題がなければ，緑色の [Merge pull request] ➔ [Confirm merge] の順にボタンを押します．
+
+   これで，あなたの書いた修正コードがGitHub上の `main` ブランチへ正式に統合されました．
+
+### Step 3: Raspberry Pi 実機でのデプロイとテスト
+
+センサーやカメラを使った実際の動作確認は，Raspberry Pi本体で行います．
+
+1. Raspberry Piで最新コードを取得する
+
+   ラズパイのターミナルを開き，マージされた最新のコードを引っ張ってきます．
+
+   ```bash
+   git checkout main
+   git pull origin main
+   ```
+
+2. ラズパイ上でDockerイメージをビルドする
+
+   ラズパイ上で以下のコマンドを実行し，Raspberry Pi（ARM）用のコンテナを構築します．
+
+   ```bash
+   docker build -t advsoftwareg5:latest -f .devcontainer/Dockerfile .
+   ```
+
+3. コンテナを起動する
+
+   起動スクリプトを実行し，コンテナを起動します．
+
+   ```bash
+   ./scripts/start-container.sh
+   ```
+
+4. ログを確認してデバッグする
+
+   エラーが起きていないか，リアルタイムログで確認します．
+
+   ```bash
+   docker logs -f advsoftwareg5_app
+   ```
+
+### 🔁 デバッグサイクルについて
+
+実機テストでエラー（バグ）が見つかった場合は，「ラズパイ上で直接コードを直す」ことは極力避け，以下のサイクルを回してください．
+
+1. エラー内容（ログ）をメモする．
+2. 手元のPC（WSL） に戻り，VS Codeでコードを修正する．
+3. 再度 GitHub に Push する．
+4. ラズパイで Pull し，スクリプトを実行して再起動・確認する．

@@ -2,7 +2,10 @@ ai/dataset/*
 !ai/dataset/data.yaml
 .claude/
 *.png
+
+# テスト用画像ディレクトリは除外しない
 *.jpg
+!unattended_sales_place_images/*.jpg
 
 # Pythonキャッシュ
 __pycache__/

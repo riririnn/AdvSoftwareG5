@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, redirect, url_for, session
+from flask import Flask, render_template, request, jsonify
 from data_store import (
     get_inventory,
     get_sales_history,
@@ -10,59 +10,12 @@ from line_notify import send_line_message
 
 app = Flask(__name__)
 
-# セッションを使うための秘密キー
-app.secret_key = "unmanned_sales_secret_key"
-
-# 仮の管理者ログイン情報
-ADMIN_ID = "admin"
-ADMIN_PASSWORD = "1234"
-
-
-def login_required():
-    """
-    ログインしているか確認する
-    """
-    return session.get("logged_in") is True
-
-
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    """
-    ログイン画面の表示・ログイン処理
-    """
-    if request.method == "POST":
-        user_id = request.form.get("user_id")
-        password = request.form.get("password")
-
-        if user_id == ADMIN_ID and password == ADMIN_PASSWORD:
-            session["logged_in"] = True
-            return redirect(url_for("index"))
-        else:
-            return render_template(
-                "login.html",
-                error="ユーザーIDまたはパスワードが違います"
-            )
-
-    return render_template("login.html")
-
-
-@app.route("/logout")
-def logout():
-    """
-    ログアウト処理
-    """
-    session.clear()
-    return redirect(url_for("login"))
-
 
 @app.route("/")
 def index():
     """
     管理画面を表示する
     """
-    if not login_required():
-        return redirect(url_for("login"))
-
     inventory = get_inventory()
     sales_history = get_sales_history()
 
@@ -78,9 +31,6 @@ def api_get_inventory():
     """
     現在の在庫情報を返すAPI
     """
-    if not login_required():
-        return jsonify({"status": "error", "message": "Login required"}), 401
-
     return jsonify(get_inventory())
 
 
@@ -89,9 +39,6 @@ def api_get_sales():
     """
     売上履歴を返すAPI
     """
-    if not login_required():
-        return jsonify({"status": "error", "message": "Login required"}), 401
-
     return jsonify(get_sales_history())
 
 
@@ -100,18 +47,17 @@ def api_add_inventory():
     """
     管理画面から在庫を追加するAPI
     """
-    if not login_required():
-        return jsonify({"status": "error", "message": "Login required"}), 401
-
     data = request.json
 
     item_name = data.get("item_name")
     quantity = int(data.get("quantity", 0))
 
     if not item_name or quantity <= 0:
-        return jsonify({"status": "error", "message": "Invalid data"}), 400
+        return jsonify({
+            "status": "error",
+            "message": "Invalid data"
+        }), 400
 
-    # 在庫を追加
     update_inventory(item_name, quantity)
 
     return jsonify({
@@ -131,7 +77,10 @@ def api_ai_inventory():
     detected_items = data.get("items", [])
 
     if not detected_items:
-        return jsonify({"status": "error", "message": "No items detected"}), 400
+        return jsonify({
+            "status": "error",
+            "message": "No items detected"
+        }), 400
 
     for item in detected_items:
         item_name = item.get("item_name")
@@ -159,15 +108,14 @@ def api_purchase():
     amount = int(data.get("amount", 0))
 
     if not item_name or quantity <= 0 or amount <= 0:
-        return jsonify({"status": "error", "message": "Invalid data"}), 400
+        return jsonify({
+            "status": "error",
+            "message": "Invalid data"
+        }), 400
 
-    # 在庫を減らす
     update_inventory(item_name, -quantity)
-
-    # 売上履歴に追加
     add_sales_record(item_name, quantity, amount)
 
-    # LINE通知
     message = (
         "【購入通知】\n"
         f"商品: {item_name}\n"
@@ -194,9 +142,11 @@ def api_shoplifting():
     shortage_amount = int(data.get("shortage_amount", 0))
 
     if not item_name or quantity <= 0:
-        return jsonify({"status": "error", "message": "Invalid data"}), 400
+        return jsonify({
+            "status": "error",
+            "message": "Invalid data"
+        }), 400
 
-    # LINE通知
     message = (
         "【万引き通知】\n"
         f"商品: {item_name}\n"
@@ -213,4 +163,3 @@ def api_shoplifting():
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
-    

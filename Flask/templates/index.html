@@ -19,6 +19,7 @@
                     <tr>
                         <th>商品名</th>
                         <th>在庫数</th>
+                        <th>操作</th>
                     </tr>
                 </thead>
                 <tbody id="inventory-table">
@@ -26,6 +27,9 @@
                     <tr>
                         <td>{{ item }}</td>
                         <td>{{ count }}</td>
+                        <td>
+                            <button class="danger" onclick="deleteProduct('{{ item }}')">削除</button>
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -37,7 +41,7 @@
             <div class="form-row">
                 <div>
                     <label for="add-item-name">商品名</label>
-                    <input type="text" id="add-item-name" placeholder="例：Tomato">
+                    <input type="text" id="add-item-name" placeholder="例：トマト">
                 </div>
 
                 <div>
@@ -74,6 +78,54 @@
         </section>
 
         <section class="card">
+            <h2>通知履歴</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>時刻</th>
+                        <th>通知種別</th>
+                        <th>商品名</th>
+                        <th>個数</th>
+                        <th>金額</th>
+                    </tr>
+                </thead>
+                <tbody id="notification-table">
+                    {% for notice in notification_history %}
+                    <tr>
+                        <td>{{ notice.time }}</td>
+                        <td>{{ notice.type }}</td>
+                        <td>{{ notice.item_name }}</td>
+                        <td>{{ notice.quantity }}</td>
+                        <td>{{ notice.amount }} 円</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+
+        <section class="card">
+            <h2>AI認識結果履歴</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>時刻</th>
+                        <th>認識商品</th>
+                        <th>認識個数</th>
+                    </tr>
+                </thead>
+                <tbody id="ai-history-table">
+                    {% for ai in ai_history %}
+                    <tr>
+                        <td>{{ ai.time }}</td>
+                        <td>{{ ai.item_name }}</td>
+                        <td>{{ ai.count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+
+        <section class="card">
             <h2>動作テスト</h2>
             <button onclick="sendTestPurchase()">購入通知テスト</button>
             <button class="danger" onclick="sendTestShoplifting()">万引き通知テスト</button>
@@ -94,6 +146,9 @@
                     <tr>
                         <td>${item}</td>
                         <td>${count}</td>
+                        <td>
+                            <button class="danger" onclick="deleteProduct('${item}')">削除</button>
+                        </td>
                     </tr>
                 `;
             }
@@ -113,6 +168,44 @@
                         <td>${sale.item_name}</td>
                         <td>${sale.quantity}</td>
                         <td>${sale.amount} 円</td>
+                    </tr>
+                `;
+            }
+        }
+
+        async function updateNotifications() {
+            const response = await fetch("/api/notifications");
+            const notifications = await response.json();
+
+            const table = document.getElementById("notification-table");
+            table.innerHTML = "";
+
+            for (const notice of notifications) {
+                table.innerHTML += `
+                    <tr>
+                        <td>${notice.time}</td>
+                        <td>${notice.type}</td>
+                        <td>${notice.item_name}</td>
+                        <td>${notice.quantity}</td>
+                        <td>${notice.amount} 円</td>
+                    </tr>
+                `;
+            }
+        }
+
+        async function updateAIHistory() {
+            const response = await fetch("/api/ai_history");
+            const aiHistory = await response.json();
+
+            const table = document.getElementById("ai-history-table");
+            table.innerHTML = "";
+
+            for (const ai of aiHistory) {
+                table.innerHTML += `
+                    <tr>
+                        <td>${ai.time}</td>
+                        <td>${ai.item_name}</td>
+                        <td>${ai.count}</td>
                     </tr>
                 `;
             }
@@ -152,6 +245,33 @@
             }
         }
 
+        async function deleteProduct(itemName) {
+            const result = confirm(`${itemName} を削除しますか？`);
+
+            if (!result) {
+                return;
+            }
+
+            const response = await fetch("/api/product/delete", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    item_name: itemName
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.status === "success") {
+                alert("商品を削除しました。");
+                updateInventory();
+            } else {
+                alert("商品の削除に失敗しました。");
+            }
+        }
+
         async function sendTestPurchase() {
             await fetch("/api/purchase", {
                 method: "POST",
@@ -159,14 +279,14 @@
                     "Content-Type": "application/json"
                 },
                 body: JSON.stringify({
-                    item_name: "Tomato",
-                    quantity: 2,
-                    amount: 300
+                    item_name: "トマト",
+                    quantity: 2
                 })
             });
 
             updateInventory();
             updateSales();
+            updateNotifications();
         }
 
         async function sendTestShoplifting() {
@@ -176,11 +296,12 @@
                     "Content-Type": "application/json"
                 },
                 body: JSON.stringify({
-                    item_name: "Tomato",
-                    quantity: 2,
-                    shortage_amount: 300
+                    item_name: "トマト",
+                    quantity: 2
                 })
             });
+
+            updateNotifications();
         }
 
         async function sendTestAIInventory() {
@@ -191,20 +312,23 @@
                 },
                 body: JSON.stringify({
                     items: [
-                        { item_name: "Tomato", count: 6 },
-                        { item_name: "Cucumber", count: 4 },
-                        { item_name: "Eggplant", count: 3 },
-                        { item_name: "Bell Pepper", count: 5 }
+                        { item_name: "トマト", count: 6 },
+                        { item_name: "きゅうり", count: 4 },
+                        { item_name: "なす", count: 3 },
+                        { item_name: "ピーマン", count: 5 }
                     ]
                 })
             });
 
             updateInventory();
+            updateAIHistory();
         }
 
         setInterval(() => {
             updateInventory();
             updateSales();
+            updateNotifications();
+            updateAIHistory();
         }, 5000);
     </script>
 </body>

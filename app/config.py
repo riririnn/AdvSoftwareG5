@@ -60,3 +60,14 @@ COIN_LOG_FILENAME = "coin.csv"
 VEGETABLE_LOG_FILENAME = "vegetable.csv"
 
 WEIGHT_LOG_FILENAME = "weight.csv"
+
+# ==========================================
+# 商品設定
+# ==========================================
+
+# 野菜の単価（円）
+# 万引き判定（theft_checker.py）の購入金額算出に使用
+VEGETABLE_PRICES = {
+    "eggplant": 710,
+    "tomato": 100,
+}

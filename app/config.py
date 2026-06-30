@@ -68,6 +68,30 @@ WEIGHT_LOG_FILENAME = "weight.csv"
 # 野菜の単価（円）
 # 万引き判定（theft_checker.py）の購入金額算出に使用
 VEGETABLE_PRICES = {
-    "eggplant": 710,
-    "tomato": 100,
+    "tomato": 50,
+    "eggplant": 100
 }
+
+
+# 対象とする野菜の名称
+TARGET_VEGETABLE = "eggplant"
+
+# 野菜の重量（g）
+VEGETABLE_WEIGHTS = 100
+
+# 硬貨の重量 (g)
+COIN_WEIGHTS = {
+    1: 1,
+    5: 3.75,
+    10: 4.5,
+    50: 4,
+    100: 4.8,
+    500: 7,
+} 
+
+# 重量許容誤差
+
+VEGETABLE_WEIGHT_MARGIN = 10
+COIN_WEIGHT_MARGIN = 1.0
+
+

@@ -1,154 +1,62 @@
-# Advanced Software Engineering - Team Project
+# 無人販売支援システム 管理画面・通知機能
 
-応用ソフトウェア工学のPBL（プロジェクトベース学習）におけるチーム開発用リポジトリです．
+## 概要
 
-## 🎯 Project Goal
-- 無人販売におけるお金の支払い問題を手助けするシステムを構築します．
-- Raspberry PiのGPIO・SPI通信を用いたセンサー制御（磁気・重量）と，カメラを用いたAI画像認識（お金の枚数計算・野菜のラベリング分類）を組み合わせ，購入や万引きの認識と外部への通知を自動化します．
+このプログラムは、無人販売所における商品管理、在庫管理、売上管理、通知管理を行うためのWeb管理画面です。
 
-## 🛠 Tech Stack & Environment
-* **Language:** Python 3.9
-* **Environment:** Ubuntu (WSL) / Docker (Dev Containers)
-* **Target Area:** IoT / AI
-* **Infrastructure:** Local Raspberry Pi (OS Lite 32bit / Debian Bullseyeベース)
-* **Web API:** Minimal Web System (Python標準ライブラリ `HTTPServer` 等を使用し、講義要件に完全準拠)
-  
-## 📂 Repository Structure
-* `/app`: メインのアプリケーションコード（WebAPI，IoT制御，AI推論など）
-* `/notebooks`: データ分析や機械学習モデルの実験用Jupyter Notebook (作ってないしなくてもいい)
-* `/docs`: 企画書，アーキテクチャ図，プレゼン資料
-* `.devcontainer`: VS Code用のDocker環境設定ファイル
-* `/scripts`: コンテナ起動用のシェルスクリプト (`start-container.sh`) が含まれるディレクトリ(使っていない)
-* `/instructions`: 個人が作ったそれぞれの機能について説明書を入れるところ(いらないかもしれない)
+管理者はWeb画面上から、商品の登録・更新、現在の在庫確認、売上履歴の確認、通知履歴の確認、AI認識結果履歴の確認を行うことができます。
 
-## 🚀 Getting Started
+また、購入時や万引き疑い発生時には、LINE通知を送信する機能も実装しています。
 
-1. **リポジトリのクローン**
-   ```bash
-   git clone git@github.com:riririnn/AdvSoftwereG5.git 
-   cd AdvSoftwereG5
-2. VS Code で開き、コンテナを起動する
-VS Codeでプロジェクトのルートディレクトリを開くと、画面右下に「コンテナで再度開く (Reopen in Container)」というポップアップが表示されるのでクリックします。
-(※表示されない場合は、`Ctrl + Shift + P `でコマンドパレットを開き、`Dev Containers: Reopen in Container `を選択してください)
-3. 自動環境構築の完了を待つ
-VS Codeが自動的に `docker/Dockerfile `を読み込み、Gitの導入、リポジトリルートの `/workspace `へのマウント、および依存パッケージの初期化（`update-dependencies.sh `の実行）を行います。完了すると、コンテナ内のターミナルでそのままGit管理やPythonの実行が可能になります。
+## 主な機能
 
-## 💻 Development (チーム開発の進め方)
+### 1. 商品登録・更新
 
-本プロジェクトでは，ハードウェア（Raspberry Pi）とソフトウェア（AI/Web）の開発を効率よく進めるため，「手元のPCで開発 ➔ GitHubで共有 ➔ ラズパイで実機テスト」 というフローを採用しています．
+管理画面から、商品名・価格・在庫数を入力して、商品情報を登録または更新できます。
 
-### Step 1: 手元のPC（WSL）でのコード実装
+商品が変更された場合や、補充後に在庫数を変更したい場合でも、プログラムを直接修正せずにWeb画面から対応できます。
 
-各メンバーは，基本的に自身のPC上でコード（PythonスクリプトやDockerfile等）の編集を行います．
+### 2. 在庫表示
 
-1. 最新のコードを取得する
+現在販売中の商品を一覧で確認できます。
 
-   作業を始める前に，必ずリモートの最新状態を反映させます．
+表示される内容は、商品名、価格、在庫数です。
 
-   ```bash
-   git pull origin main
-   ```
+また、販売しなくなった商品は削除ボタンから一覧から削除できます。
 
-2. 作業用ブランチを作成する
+### 3. 売上履歴表示
 
-   直接 `main` ブランチを編集せず，機能ごとにブランチを切って作業します（例: カメラ機能の実装）．
+購入が発生した場合、購入時刻、商品名、個数、金額を売上履歴として記録します。
 
-   ```bash
-   git checkout -b feature/camera-recognition
-   ```
+これにより、いつ、どの商品が、何個売れたのかを後から確認できます。
 
-3. VS Code + Dev Containers で開発する（ガチで推奨）
+### 4. 通知履歴表示
 
-   VS Codeでフォルダを開き，右下のポップアップまたはコマンドパレットから Reopen in Container を選択します．これにより，コンテナ内のPython環境がVS Codeに認識され，構文エラーのチェックや自動補完が効くようになります．
+購入通知や万引き通知を履歴として管理画面に表示します。
 
-   ⚠️ 注意: 手元のPCにはセンサーやカメラが繋がっていないため，ハードウェア依存のコードをテストする際はダミーデータを用意するか，実機テストで行います．
+正常購入の場合は購入通知、支払い不足や万引き疑いがある場合は万引き通知として記録されます。
 
-### Step 2-1: GitHub への共有（ブランチ内でのコード管理）
+### 5. AI認識結果履歴表示
 
-誰かとブランチを共有して開発を行っている場合はこまめにcommit，push，pullを行い，開発状況を共有してください．
+AI認識結果として送られた商品名と個数を履歴として表示します。
 
-またコンフリクトが極力起きないように同じ個所を同時に編集しないように心がけてください(編集する場合は本当にこまめにプッシュを行うように)
+現在はテスト用のAI認識結果を送信し、在庫情報に反映する構成になっています。
 
-※VScode上の拡張機能で管理することをおすすめします．
+### 6. LINE通知
 
-1. 変更をコミットしてプッシュする ( local → remote )
+購入時には購入通知、万引き疑い発生時には万引き通知をLINEに送信します。
 
-   ```
-   (originリポジトリのfeature/camera-recognitionブランチの場合)
-   git add .
-   git commit -m "何をしたか(what do)，何に対してか(waht purpose)"
-   git push origin feature/camera-recognition
-   ```
+購入通知では、商品名、個数、支払金額を送信します。
 
-2. ほかの人の変更を自分のコードに適用する( remote → local )
+万引き通知では、商品名、個数、不足金額を送信します。
 
-   ```
-   (おすすめ)git pull --rebase
-   もしくは git pull 
-   ```
+## ファイル構成
 
-### Step 2-2: GitHub 上で作業ブランチを `main` へ統合する（Webで行う場合）
-
-この動作は作業ブランチでの編集がすべて完了し，機能が完成した場合などに行ってください．
-
-PCでプッシュした作業ブランチのコードを，プロジェクトの正規コード（`main` ブランチ）へと統合します．この作業は GitHubのウェブ画面で行います．
-
-1. GitHubのリポジトリ画面を開く
-
-   ブラウザでGitHubにアクセスすると，画面上部に「feature/camera-fix had recent pushes...」という黄色いバーが表示されるので，その横にある [Compare & pull request] ボタンを押します．
-
-2. Pull Request (PR) を作成する
-
-   変更内容のタイトルやメモを記入し，画面右下の [Create pull request] ボタンを押します．
-
-3. コードを統合（マージ）する
-
-   画面が切り替わり，自動で競合（コンフリクト）のチェックが行われます．問題がなければ，緑色の [Merge pull request] ➔ [Confirm merge] の順にボタンを押します．
-
-   これで，あなたの書いた修正コードがGitHub上の `main` ブランチへ正式に統合されました．
-
-### Step 3: Raspberry Pi 実機でのデプロイとテスト
-
-センサーやカメラを使った実際の動作確認は，Raspberry Pi本体で行います．
-
-1. Raspberry Piで最新コードを取得する
-
-   ラズパイのターミナルを開き，マージされた最新のコードを引っ張ってきます．
-
-   ```bash
-   git checkout main
-   git pull origin main
-   ```
-
-2. ラズパイ上でDockerイメージをビルドする
-
-   ラズパイ上で以下のコマンドを実行し，Raspberry Pi（ARM）用のコンテナを構築します．
-
-   ```bash
-   docker build -t advsoftwareg5:latest -f docker/Dockerfile .
-   ```
-
-3. コンテナを起動する
-
-   起動スクリプトを実行し，コンテナを起動します．
-
-   ```bash
-   ./scripts/start-container.sh
-   ```
-
-4. ログを確認してデバッグする
-
-   エラーが起きていないか，リアルタイムログで確認します．
-
-   ```bash
-   docker logs -f advsoftwareg5_app
-   ```
-
-### 🔁 デバッグサイクルについて
-
-実機テストでエラー（バグ）が見つかった場合は，「ラズパイ上で直接コードを直す」ことは極力避け，以下のサイクルを回してください．
-
-1. エラー内容（ログ）をメモする．
-2. 手元のPC（WSL） に戻り，VS Codeでコードを修正する．
-3. 再度 GitHub に Push する．
-4. ラズパイで Pull し，スクリプトを実行して再起動・確認する．
+```text
+app.py
+data_store.py
+line_notify.py
+templates/
+  index.html
+static/
+  style.css

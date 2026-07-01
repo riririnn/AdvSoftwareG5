@@ -19,7 +19,7 @@ def check_purchase_or_theft(
     weight_counts: dict | None = None,
 ) -> bool:
     """
-    AIの個数���ウントと重量センサ��の個数を照合する。
+    AIの個数カウントと重量センサーの個数を照合する。
     weight_counts が None の場合は AI単体で判定。
     戻り値: 異常（万引き等）が疑われる場合 True
     """

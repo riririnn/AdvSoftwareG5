@@ -1,12 +1,67 @@
-train: train/images
-val: train/images   # valid/ が存在しないため train で代用（学習確認用）
-
-nc: 26
-names: ['avocado', 'beans', 'beet', 'bell pepper', 'broccoli', 'brus capusta', 'cabbage', 'carrot', 'cayliflower', 'celery', 'corn', 'cucumber', 'eggplant', 'fasol', 'garlic', 'hot pepper', 'onion', 'peas', 'potato', 'pumpkin', 'rediska', 'redka', 'salad', 'squash-patisson', 'tomato', 'vegetable marrow']
-
+names:
+- 10000yen
+- 1000yen
+- 100yen
+- 10yen
+- 1yen
+- 5000yen
+- 500yen
+- 50yen
+- 5yen
+- almond
+- apple
+- asparagus
+- avocado
+- banana
+- beans
+- beet
+- bell pepper
+- blackberry
+- blueberry
+- broccoli
+- brussels sprouts
+- cabbage
+- carrot
+- cauliflower
+- celery
+- cherry
+- corn
+- cucumber
+- egg
+- eggplant
+- garlic
+- grape
+- green bean
+- green onion
+- hot pepper
+- kiwi
+- lemon
+- lettuce
+- lime
+- mandarin
+- mushroom
+- onion
+- orange
+- pattypan squash
+- pea
+- peach
+- pear
+- pineapple
+- potato
+- pumpkin
+- radish
+- raspberry
+- strawberry
+- tomato
+- vegetable marrow
+- watermelon
+nc: 56
 roboflow:
-  workspace: test-on9hk
-  project: vegetables-kacga
-  version: 3
   license: CC BY 4.0
-  url: https://universe.roboflow.com/test-on9hk/vegetables-kacga/dataset/3
+  project: unattended_sales_place
+  url: https://universe.roboflow.com/rin-yokoyama/unattended_sales_place/dataset/4
+  version: 4
+  workspace: rin-yokoyama
+test: ../test/images
+train: ../train/images
+val: ../valid/images

@@ -40,13 +40,14 @@ RUN pip3 install --no-cache-dir \
 RUN pip3 install --no-cache-dir \
     opencv-python-headless \
     pyyaml \
-    ultralytics
+    ultralytics \
+    roboflow
 
 # ラズパイ専用ライブラリはARM環境のみインストール
 RUN if [ "$(uname -m)" = "armv7l" ] || [ "$(uname -m)" = "aarch64" ]; then \
-        pip3 install --no-cache-dir RPi.GPIO spidev; \
+    pip3 install --no-cache-dir RPi.GPIO spidev; \
     else \
-        echo "PC環境を検知。ラズパイ専用ライブラリはスキップします。"; \
+    echo "PC環境を検知。ラズパイ専用ライブラリはスキップします。"; \
     fi
 
 # 本番（ラズパイ実機）用。開発時はホストフォルダがマウントされるため上書きされる

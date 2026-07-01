@@ -1,0 +1,13 @@
+{
+  "session_id": "20260701_153015",
+  "status": "finished",
+  "theft_check": {
+    "judgement": "normal",
+    "purchase_amount": 300,
+    "paid_amount": 300,
+    "shortage": 0,
+    "decreased_vegetables_weight": {
+      "トマト": 2
+    }
+  }
+}

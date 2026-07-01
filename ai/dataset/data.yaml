@@ -1,0 +1,67 @@
+names:
+- 10000yen
+- 1000yen
+- 100yen
+- 10yen
+- 1yen
+- 5000yen
+- 500yen
+- 50yen
+- 5yen
+- almond
+- apple
+- asparagus
+- avocado
+- banana
+- beans
+- beet
+- bell pepper
+- blackberry
+- blueberry
+- broccoli
+- brussels sprouts
+- cabbage
+- carrot
+- cauliflower
+- celery
+- cherry
+- corn
+- cucumber
+- egg
+- eggplant
+- garlic
+- grape
+- green bean
+- green onion
+- hot pepper
+- kiwi
+- lemon
+- lettuce
+- lime
+- mandarin
+- mushroom
+- onion
+- orange
+- pattypan squash
+- pea
+- peach
+- pear
+- pineapple
+- potato
+- pumpkin
+- radish
+- raspberry
+- strawberry
+- tomato
+- vegetable marrow
+- watermelon
+nc: 56
+roboflow:
+  license: CC BY 4.0
+  project: unattended_sales_place
+  url: https://universe.roboflow.com/rin-yokoyama/unattended_sales_place/dataset/4
+  version: 4
+  workspace: rin-yokoyama
+test: ../test/images
+train: ../train/images
+val: ../valid/images

@@ -1,28 +1,45 @@
 {
   "name": "AdvSoftwareG5-DevEnvironment",
-  
-  // 参照するDockerfileのパスを指定
+
   "build": {
     "dockerfile": "Dockerfile",
     "context": ".."
   },
 
-  // コンテナ内での作業ディレクトリ（DockerfileのWORKDIRと合わせる）
   "workspaceFolder": "/workspace",
 
-  // コンテナ起動時に毎回実行するスクリプト（環境変数の自動読み込みやパッケージチェック）
+  // シェルスクリプトの docker run オプションに相当する設定
+  "runArgs": [
+    "--gpus", "all",
+    "--cap-add=SYS_PTRACE",
+    "--security-opt", "seccomp=unconfined",
+    "--ipc=host"
+  ],
+
+  "mounts": [
+    "source=${localEnv:HOME}/.claude,target=/root/.claude,type=bind,consistency=cached",
+    "source=${localEnv:HOME}/.tmux.conf,target=/root/.tmux.conf,type=bind,consistency=cached"
+  ],
+
+  // コンテナ起動・再起動のたびに実行
+  "postStartCommand": "git config --global --add safe.directory ${containerWorkspaceFolder} && find /workspace/.claude/worktrees -name '.git' -delete 2>/dev/null; git -C /workspace worktree prune 2>/dev/null; true",
+
   "postCreateCommand": "bash .devcontainer/update-dependencies.sh",
 
-  // VS Codeの設定をチーム全員で統一する
   "customizations": {
     "vscode": {
-      // コンテナに入った時に自動でインストールされる拡張機能のリスト
       "extensions": [
-        "ms-python.python",     // Python言語サポート（必須）
-        "ms-python.vscode-pylance", // コード補完・エラーチェック（必須）
-        "ms-azuretools.vscode-docker" // Docker管理
+        "anthropic.claude-code",
+        "ms-python.python",
+        "ms-python.vscode-pylance",
+        "ms-python.debugpy",
+        "ms-python.vscode-python-envs",
+        "ms-azuretools.vscode-docker",
+        "ms-azuretools.vscode-containers",
+        "ms-ceintl.vscode-language-pack-ja",
+        "mechatroner.rainbow-csv",
+        "yzhang.markdown-all-in-one"
       ],
-      // コンテナ内でのVS Codeの動作設定
       "settings": {
         "python.defaultInterpreterPath": "/usr/local/bin/python",
         "python.analysis.typeCheckingMode": "basic",
@@ -31,6 +48,8 @@
     }
   },
 
-  // ホストPCのユーザー権限とコンテナ内の権限を一致させる（ファイルの編集ロックを防ぐ）
-  "remoteUser": "root"
+  "remoteUser": "root",
+
+  // ポートフォワーディング: コンテナの8080をホスト(Ubuntu)経由でWindowsに公開
+  "forwardPorts": [8080]
 }

@@ -1,1 +1,24 @@
-ai/
+ai/dataset/*
+!ai/dataset/data.yaml
+.claude/
+*.png
+
+# テスト用画像ディレクトリは除外しない
+*.jpg
+!unattended_sales_place_images/*.jpg
+
+# Pythonキャッシュ
+__pycache__/
+*.pyc
+*.pyo
+
+# YOLOモデル重みファイル（大容量のためgit管理外）
+*.pt
+*.onnx
+
+# 学習出力（ログ・チェックポイント）
+ai/runs/
+runs/
+
+# 作業メモ
+.devcontainer/todo.md

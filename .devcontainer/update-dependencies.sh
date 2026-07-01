@@ -4,12 +4,11 @@ echo "========================================="
 echo " 同期中: DevContainer 開発環境チェック"
 echo "========================================="
 
-# パッケージの不足がないか、コンテナ起動時に念のため確認
-pip install --no-cache-dir opencv-python-headless tflite-runtime
-
-# もし将来的に requirements.txt を使う場合はここで自動インストール可能
-if [ -f "requirements.txt" ]; then
-    pip install -r requirements.txt
+# git user 情報が未設定の場合に案内
+if [ -z "$(git config --global user.email 2>/dev/null)" ]; then
+    echo "⚠️  git user.email が未設定です。初回のみ以下を実行してください："
+    echo "   git config --global user.email 'your@email.com'"
+    echo "   git config --global user.name 'Your Name'"
 fi
 
 echo "環境の初期化が完了しました。開発を始めてください！"

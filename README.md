@@ -8,18 +8,18 @@
 
 ## 🛠 Tech Stack & Environment
 * **Language:** Python 3.9
-* **Environment:** Ubuntu (WSL) / Docker (Dev Containers)
+* **Environment:** Ubuntu (SSH接続) / Docker (Dev Containers)
 * **Target Area:** IoT / AI
 * **Infrastructure:** Local Raspberry Pi (OS Lite 32bit / Debian Bullseyeベース)
 * **Web API:** Minimal Web System (Python標準ライブラリ `HTTPServer` 等を使用し、講義要件に完全準拠)
-  
+* **AI:** YOLOv8 (ultralytics) / 学習環境: NVIDIA GPU (CUDA 12.8)
+
 ## 📂 Repository Structure
 * `/app`: メインのアプリケーションコード（WebAPI，IoT制御，AI推論など）
-* `/notebooks`: データ分析や機械学習モデルの実験用Jupyter Notebook (作ってないしなくてもいい)
+* `/ai`: AI認識モジュール（学習・推論・データセット・設定）→ 詳細は [ai/README.md](ai/README.md)
 * `/docs`: 企画書，アーキテクチャ図，プレゼン資料
-* `.devcontainer`: VS Code用のDocker環境設定ファイル
+* `.devcontainer`: VS Code用のDocker環境設定ファイル（GPU対応済み）
 * `/scripts`: コンテナ起動用のシェルスクリプト (`start-container.sh`) が含まれるディレクトリ(使っていない)
-* `/instructions`: 個人が作ったそれぞれの機能について説明書を入れるところ(いらないかもしれない)
 
 ## 🚀 Getting Started
 
@@ -27,11 +27,14 @@
    ```bash
    git clone git@github.com:riririnn/AdvSoftwereG5.git 
    cd AdvSoftwereG5
+   ```
 2. VS Code で開き、コンテナを起動する
 VS Codeでプロジェクトのルートディレクトリを開くと、画面右下に「コンテナで再度開く (Reopen in Container)」というポップアップが表示されるのでクリックします。
 (※表示されない場合は、`Ctrl + Shift + P `でコマンドパレットを開き、`Dev Containers: Reopen in Container `を選択してください)
 3. 自動環境構築の完了を待つ
-VS Codeが自動的に `docker/Dockerfile `を読み込み、Gitの導入、リポジトリルートの `/workspace `へのマウント、および依存パッケージの初期化（`update-dependencies.sh `の実行）を行います。完了すると、コンテナ内のターミナルでそのままGit管理やPythonの実行が可能になります。
+VS Codeが自動的に `.devcontainer/Dockerfile` を読み込み、Gitの導入、リポジトリルートの `/workspace` へのマウント、および依存パッケージの初期化（`update-dependencies.sh` の実行）を行います。完了すると、コンテナ内のターミナルでそのままGit管理やPythonの実行が可能になります。
+
+> ⚠️ **GPU環境について**: DevContainerはNVIDIA GPU対応済みです（`--gpus all`）。ホスト側に `nvidia-container-toolkit` がインストールされている必要があります。
 
 ## 💻 Development (チーム開発の進め方)
 
@@ -125,7 +128,7 @@ PCでプッシュした作業ブランチのコードを，プロジェクトの
    ラズパイ上で以下のコマンドを実行し，Raspberry Pi（ARM）用のコンテナを構築します．
 
    ```bash
-   docker build -t advsoftwareg5:latest -f docker/Dockerfile .
+   docker build -t advsoftwareg5:latest -f .devcontainer/Dockerfile .
    ```
 
 3. コンテナを起動する

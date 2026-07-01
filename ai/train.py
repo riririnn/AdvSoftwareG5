@@ -20,7 +20,7 @@ from ultralytics import YOLO
 
 # ---- デフォルト設定 ----
 DEFAULT_CONFIG_YAML = Path(__file__).parent / "configs" / "vegetables.yaml"
-BASE_MODEL  = "yolov8n.pt"  # nano: 軽量。精度重視なら yolov8s.pt / yolov8m.pt
+BASE_MODEL  = "yolov8m.pt"  # medium: 精度重視。RTX5060Ti なら十分動く
 EPOCHS      = 100
 IMG_SIZE    = 640
 BATCH_SIZE  = 16            # ラズパイCPU運用なら 4〜8 を推奨

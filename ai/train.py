@@ -82,7 +82,21 @@ def check_class_alignment(data_yaml: Path) -> None:
         print("✅ [クラスID整合] 問題なし")
 
 
-def train(data_yaml: Path = DEFAULT_CONFIG_YAML):
+def train(data_yaml: Path = DEFAULT_CONFIG_YAML, resume: bool = False):
+    last_weights = PROJECT_DIR / RUN_NAME / "weights" / "last.pt"
+
+    if resume:
+        if not last_weights.exists():
+            raise FileNotFoundError(
+                f"再開用チェックポイントが見つかりません: {last_weights}"
+            )
+        print(f"\n[Train] チェックポイントから再開します: {last_weights}\n")
+        model = YOLO(str(last_weights))
+        results = model.train(resume=True)
+        best_weights = PROJECT_DIR / RUN_NAME / "weights" / "best.pt"
+        print(f"\n✅ 学習完了。最良モデル: {best_weights}")
+        return results
+
     if not data_yaml.exists():
         raise FileNotFoundError(
             f"データセット設定ファイルが見つかりません: {data_yaml}\n"
@@ -146,10 +160,15 @@ if __name__ == "__main__":
         choices=["train", "val"],
         default="train",
     )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="直前のチェックポイント(last.pt)から学習を再開する",
+    )
     args = parser.parse_args()
 
     if args.mode == "train":
-        train(args.data)
+        train(args.data, resume=args.resume)
         validate(args.data)
     else:
         validate(args.data)

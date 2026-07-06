@@ -1,0 +1,110 @@
+body {
+    font-family: sans-serif;
+    margin: 0;
+    background-color: #f4f6f8;
+    color: #222;
+}
+
+header {
+    background-color: #222;
+    color: white;
+    padding: 24px;
+    text-align: center;
+}
+
+.logout-button {
+    display: inline-block;
+    margin-top: 12px;
+    color: white;
+    background-color: #555;
+    padding: 8px 16px;
+    text-decoration: none;
+    border-radius: 6px;
+}
+
+.logout-button:hover {
+    opacity: 0.8;
+}
+
+main {
+    width: 90%;
+    max-width: 1000px;
+    margin: 24px auto;
+}
+
+.card {
+    background-color: white;
+    padding: 24px;
+    margin-bottom: 24px;
+    border-radius: 12px;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+h2 {
+    border-left: 6px solid #222;
+    padding-left: 12px;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+    margin-top: 16px;
+}
+
+th, td {
+    border: 1px solid #ddd;
+    padding: 12px;
+    text-align: center;
+}
+
+th {
+    background-color: #f0f0f0;
+}
+
+button {
+    padding: 12px 20px;
+    margin-right: 12px;
+    margin-top: 8px;
+    border: none;
+    border-radius: 8px;
+    background-color: #2e7d32;
+    color: white;
+    font-size: 16px;
+    cursor: pointer;
+}
+
+button.danger {
+    background-color: #c62828;
+}
+
+button.ai-button {
+    background-color: #1565c0;
+}
+
+button:hover {
+    opacity: 0.85;
+}
+
+.form-row {
+    display: flex;
+    gap: 16px;
+    align-items: end;
+    flex-wrap: wrap;
+}
+
+.form-row div {
+    display: flex;
+    flex-direction: column;
+}
+
+.form-row label {
+    font-weight: bold;
+    margin-bottom: 6px;
+}
+
+.form-row input {
+    padding: 10px;
+    font-size: 16px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+}

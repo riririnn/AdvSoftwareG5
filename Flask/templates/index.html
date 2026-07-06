@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <title>無人販売支援システム 管理画面</title>
+    <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+    <header>
+        <h1>無人販売支援システム 管理画面</h1>
+        <p>在庫・売上・通知状況を確認する画面</p>
+    </header>
+
+    <main>
+        <section class="card">
+            <h2>商品登録・更新</h2>
+            <p>
+                商品名・価格・在庫数・単重量を入力して、商品情報を登録または更新できます。
+                商品補充時も、この画面で在庫数を更新します。
+            </p>
+
+            <div class="form-row">
+                <div>
+                    <label for="product-name">商品名</label>
+                    <input type="text" id="product-name" placeholder="例：トマト">
+                </div>
+
+                <div>
+                    <label for="product-price">価格</label>
+                    <input type="number" id="product-price" placeholder="例：150" min="0">
+                </div>
+
+                <div>
+                    <label for="product-count">在庫数</label>
+                    <input type="number" id="product-count" placeholder="例：10" min="0">
+                </div>
+
+                <div>
+                    <label for="product-weight">単重量(g)</label>
+                    <input type="number" id="product-weight" placeholder="例：100" min="0">
+                </div>
+
+                <button onclick="addOrUpdateProduct()">登録・更新</button>
+            </div>
+        </section>
+
+        <section class="card">
+            <h2>現在の在庫</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>商品名</th>
+                        <th>価格</th>
+                        <th>在庫数</th>
+                        <th>単重量</th>
+                        <th>操作</th>
+                    </tr>
+                </thead>
+                <tbody id="inventory-table">
+                    {% for item, count in inventory.items() %}
+                    <tr>
+                        <td>{{ item }}</td>
+                        <td>{{ products[item].price }} 円</td>
+                        <td>{{ count }}</td>
+                        <td>{{ products[item].weight }} g</td>
+                        <td>
+                            <button class="danger" onclick="deleteProduct('{{ item }}')">削除</button>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+
+        <section class="card">
+            <h2>売上履歴</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>時刻</th>
+                        <th>商品名</th>
+                        <th>個数</th>
+                        <th>金額</th>
+                    </tr>
+                </thead>
+                <tbody id="sales-table">
+                    {% for sale in sales_history %}
+                    <tr>
+                        <td>{{ sale.time }}</td>
+                        <td>{{ sale.item_name }}</td>
+                        <td>{{ sale.quantity }}</td>
+                        <td>{{ sale.amount }} 円</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+
+        <section class="card">
+            <h2>通知履歴</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>時刻</th>
+                        <th>通知種別</th>
+                        <th>商品名</th>
+                        <th>個数</th>
+                        <th>金額</th>
+                    </tr>
+                </thead>
+                <tbody id="notification-table">
+                    {% for notice in notification_history %}
+                    <tr>
+                        <td>{{ notice.time }}</td>
+                        <td>{{ notice.type }}</td>
+                        <td>{{ notice.item_name }}</td>
+                        <td>{{ notice.quantity }}</td>
+                        <td>{{ notice.amount }} 円</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+
+        <section class="card">
+            <h2>AI認識結果履歴</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>時刻</th>
+                        <th>認識商品</th>
+                        <th>認識個数</th>
+                    </tr>
+                </thead>
+                <tbody id="ai-history-table">
+                    {% for ai in ai_history %}
+                    <tr>
+                        <td>{{ ai.time }}</td>
+                        <td>{{ ai.item_name }}</td>
+                        <td>{{ ai.count }}</td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </section>
+
+        <section class="card">
+            <h2>最新セッション結果</h2>
+            <p>
+                app側で作成された最新のsession.jsonを読み込み、
+                購入結果や万引き判定結果を表示します。
+            </p>
+
+            <table>
+                <thead>
+                    <tr>
+                        <th>セッションID</th>
+                        <th>状態</th>
+                        <th>判定</th>
+                        <th>購入金額</th>
+                        <th>支払金額</th>
+                        <th>不足金額</th>
+                        <th>減少商品</th>
+                    </tr>
+                </thead>
+                <tbody id="latest-session-table">
+                    <tr>
+                        <td colspan="7">session.jsonはまだ読み込まれていません。</td>
+                    </tr>
+                </tbody>
+            </table>
+
+            <button onclick="importLatestSession()">最新セッションを履歴に反映</button>
+        </section>
+
+        <section class="card">
+            <h2>動作テスト</h2>
+            <button onclick="sendTestPurchase()">購入通知テスト</button>
+            <button class="danger" onclick="sendTestShoplifting()">万引き通知テスト</button>
+            <button class="ai-button" onclick="sendTestAIInventory()">AI認識結果テスト</button>
+        </section>
+    </main>
+
+    <script>
+        async function updateInventory() {
+            const inventoryResponse = await fetch("/api/inventory");
+            const inventory = await inventoryResponse.json();
+
+            const productsResponse = await fetch("/api/products");
+            const products = await productsResponse.json();
+
+            const table = document.getElementById("inventory-table");
+            table.innerHTML = "";
+
+            for (const [item, count] of Object.entries(inventory)) {
+                const price = products[item] ? products[item].price : 0;
+                const weight = products[item] ? products[item].weight : 0;
+
+                table.innerHTML += `
+                    <tr>
+                        <td>${item}</td>
+                        <td>${price} 円</td>
+                        <td>${count}</td>
+                        <td>${weight} g</td>
+                        <td>
+                            <button class="danger" onclick="deleteProduct('${item}')">削除</button>
+                        </td>
+                    </tr>
+                `;
+            }
+        }
+
+        async function updateSales() {
+            const response = await fetch("/api/sales");
+            const sales = await response.json();
+
+            const table = document.getElementById("sales-table");
+            table.innerHTML = "";
+
+            for (const sale of sales) {
+                table.innerHTML += `
+                    <tr>
+                        <td>${sale.time}</td>
+                        <td>${sale.item_name}</td>
+                        <td>${sale.quantity}</td>
+                        <td>${sale.amount} 円</td>
+                    </tr>
+                `;
+            }
+        }
+
+        async function updateNotifications() {
+            const response = await fetch("/api/notifications");
+            const notifications = await response.json();
+
+            const table = document.getElementById("notification-table");
+            table.innerHTML = "";
+
+            for (const notice of notifications) {
+                table.innerHTML += `
+                    <tr>
+                        <td>${notice.time}</td>
+                        <td>${notice.type}</td>
+                        <td>${notice.item_name}</td>
+                        <td>${notice.quantity}</td>
+                        <td>${notice.amount} 円</td>
+                    </tr>
+                `;
+            }
+        }
+
+        async function updateAIHistory() {
+            const response = await fetch("/api/ai_history");
+            const aiHistory = await response.json();
+
+            const table = document.getElementById("ai-history-table");
+            table.innerHTML = "";
+
+            for (const ai of aiHistory) {
+                table.innerHTML += `
+                    <tr>
+                        <td>${ai.time}</td>
+                        <td>${ai.item_name}</td>
+                        <td>${ai.count}</td>
+                    </tr>
+                `;
+            }
+        }
+
+        async function updateLatestSession() {
+            const table = document.getElementById("latest-session-table");
+
+            try {
+                const response = await fetch("/api/session/latest");
+                const data = await response.json();
+
+                if (data.status !== "success") {
+                    table.innerHTML = `
+                        <tr>
+                            <td colspan="7">${data.message}</td>
+                        </tr>
+                    `;
+                    return;
+                }
+
+                const session = data.session;
+                const theftCheck = session.theft_check || {};
+                const decreasedVegetables = theftCheck.decreased_vegetables_weight || {};
+                const decreasedText = Object.keys(decreasedVegetables).length > 0
+                    ? Object.entries(decreasedVegetables)
+                        .map(([name, count]) => `${name}: ${count}`)
+                        .join(" / ")
+                    : "なし";
+
+                table.innerHTML = `
+                    <tr>
+                        <td>${session.session_id || "-"}</td>
+                        <td>${session.status || "-"}</td>
+                        <td>${theftCheck.judgement || "-"}</td>
+                        <td>${theftCheck.purchase_amount ?? "-"} 円</td>
+                        <td>${theftCheck.paid_amount ?? "-"} 円</td>
+                        <td>${theftCheck.shortage ?? "-"} 円</td>
+                        <td>${decreasedText}</td>
+                    </tr>
+                `;
+            } catch (error) {
+                table.innerHTML = `
+                    <tr>
+                        <td colspan="7">session.jsonの読み込みに失敗しました。</td>
+                    </tr>
+                `;
+            }
+        }
+
+        async function importLatestSession() {
+            const response = await fetch("/api/session/import", {
+                method: "POST"
+            });
+
+            const data = await response.json();
+
+            if (data.status === "success") {
+                alert("session.jsonの内容を履歴に反映しました。");
+            } else if (data.status === "skipped") {
+                alert("このsession.jsonはすでに履歴へ反映済みです。");
+            } else {
+                alert(data.message || "session.jsonの反映に失敗しました。");
+            }
+
+            await updateSales();
+            await updateNotifications();
+            await updateLatestSession();
+        }
+
+        async function addOrUpdateProduct() {
+            const itemName = document.getElementById("product-name").value;
+            const price = Number(document.getElementById("product-price").value);
+            const count = Number(document.getElementById("product-count").value);
+            const weight = Number(document.getElementById("product-weight").value);
+
+            if (!itemName || price < 0 || count < 0 || weight <= 0) {
+                alert("商品名・価格・在庫数・単重量を正しく入力してください。");
+                return;
+            }
+
+            const response = await fetch("/api/product", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    item_name: itemName,
+                    price: price,
+                    count: count,
+                    weight: weight
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.status === "success") {
+                alert("商品情報を登録・更新しました。");
+
+                document.getElementById("product-name").value = "";
+                document.getElementById("product-price").value = "";
+                document.getElementById("product-count").value = "";
+                document.getElementById("product-weight").value = "";
+
+                await updateInventory();
+            } else {
+                alert("商品情報の登録・更新に失敗しました。");
+            }
+        }
+
+        async function deleteProduct(itemName) {
+            const result = confirm(`${itemName} を削除しますか？`);
+
+            if (!result) {
+                return;
+            }
+
+            const response = await fetch("/api/product/delete", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    item_name: itemName
+                })
+            });
+
+            const data = await response.json();
+
+            if (data.status === "success") {
+                alert("商品を削除しました。");
+
+                await updateInventory();
+                await updateSales();
+                await updateNotifications();
+                await updateAIHistory();
+            } else {
+                alert("商品の削除に失敗しました。");
+            }
+        }
+
+        async function sendTestPurchase() {
+            await fetch("/api/purchase", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    item_name: "トマト",
+                    quantity: 2
+                })
+            });
+
+            await updateInventory();
+            await updateSales();
+            await updateNotifications();
+        }
+
+        async function sendTestShoplifting() {
+            await fetch("/api/shoplifting", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    item_name: "トマト",
+                    quantity: 2
+                })
+            });
+
+            await updateNotifications();
+        }
+
+        async function sendTestAIInventory() {
+            await fetch("/api/ai_inventory", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify({
+                    items: [
+                        { item_name: "トマト", count: 6 },
+                        { item_name: "きゅうり", count: 4 },
+                        { item_name: "なす", count: 3 },
+                        { item_name: "ピーマン", count: 5 }
+                    ]
+                })
+            });
+
+            await updateInventory();
+            await updateAIHistory();
+        }
+
+        setInterval(() => {
+            updateInventory();
+            updateSales();
+            updateNotifications();
+            updateAIHistory();
+            updateLatestSession();
+        }, 5000);
+
+        updateLatestSession();
+    </script>
+</body>
+</html>

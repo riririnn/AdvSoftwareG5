@@ -101,7 +101,7 @@ class UnmannedSalesRequestHandler(BaseHTTPRequestHandler):
 def run_server(port=8080):
     server_address = ("", port)
     httpd = HTTPServer(server_address, UnmannedSalesRequestHandler)
-    print(bind_address := f"Starting minimal web server on port {port}...")
+    print(f"Starting minimal web server on port {port}...")
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:

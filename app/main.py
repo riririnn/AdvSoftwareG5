@@ -29,7 +29,7 @@ def check_purchase_or_theft(
     for item, ai_n in ai_counts.items():
         weight_n = weight_counts.get(item, 0)
         if abs(ai_n - weight_n) >= 2:
-            print(f"[Alert] {item}: AI={ai_n} vs 重量={weight_n} — 個��不一致")
+            print(f"[Alert] {item}: AI={ai_n} vs 重量={weight_n} — 個数不一致")
             return True
     return False
 

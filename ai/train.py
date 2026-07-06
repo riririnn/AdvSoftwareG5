@@ -125,6 +125,7 @@ def train(data_yaml: Path = DEFAULT_CONFIG_YAML, resume: bool = False):
         name=RUN_NAME,
         exist_ok=True,
         device="0" if torch.cuda.is_available() else "cpu",
+        amp=False,
         workers=2,
         **AUGMENT_PARAMS,
     )

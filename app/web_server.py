@@ -5,10 +5,11 @@ from pathlib import Path
 
 # ai/ モジュールをインポートできるようにパスを通す
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from ai.inference import load_model, predict
+from ai.inference import load_model, load_person_model, predict_all
 
 # 起動時にモデルを1度だけロード
-_model = load_model()
+_model = load_model()               # 野菜・硬貨（自前学習済み）
+_person_model = load_person_model() # 人間（COCO事前学習済み）
 
 # システムの現在の状態を保持するダミーデータ（実際のセンサー値や売上と連動させます）
 system_status = {
@@ -67,7 +68,7 @@ class UnmannedSalesRequestHandler(BaseHTTPRequestHandler):
                 self.send_error(400, "Bad Request: could not decode image")
                 return
 
-            result = predict(_model, frame)
+            result = predict_all(_model, _person_model, frame)
             response_json = json.dumps(result, ensure_ascii=False).encode("utf-8")
 
             self.send_response(200)

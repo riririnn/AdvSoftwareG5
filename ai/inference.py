@@ -33,6 +33,8 @@ from pathlib import Path
 from ultralytics import YOLO
 
 DEFAULT_WEIGHTS = Path(__file__).parent / "runs" / "vegetables_v1" / "weights" / "best.pt"
+PERSON_WEIGHTS = "yolov8s.pt"  # COCO事前学習済み（初回実行時に自動ダウンロード）
+PERSON_CLASS_ID = 0            # COCOの person クラス
 DEFAULT_CONF = 0.25
 DEFAULT_IMGSZ = 640
 
@@ -44,6 +46,11 @@ def load_model(weights: Path = DEFAULT_WEIGHTS) -> YOLO:
             "先に ai/train.py を実行して学習を完了させてください。"
         )
     return YOLO(str(weights))
+
+
+def load_person_model(weights: str = PERSON_WEIGHTS) -> YOLO:
+    """人間検出用のCOCO事前学習済みモデルをロードする（学習不要）。"""
+    return YOLO(weights)
 
 
 def predict(model: YOLO, source, conf: float = DEFAULT_CONF) -> dict:
@@ -85,3 +92,33 @@ def predict(model: YOLO, source, conf: float = DEFAULT_CONF) -> dict:
         "height":     h,
         "detections": detections,
     }
+
+
+def predict_all(model: YOLO, person_model: YOLO, source, conf: float = DEFAULT_CONF) -> dict:
+    """
+    野菜・硬貨モデルと人間検出モデルの両方で推論し、結果をマージして返す。
+
+    人間の検出は class_name="person" として detections に追加される。
+    class_id は自前データセットのIDと衝突しないよう -1 とする。
+    """
+    result = predict(model, source, conf)
+
+    person_results = person_model.predict(
+        source=source, imgsz=DEFAULT_IMGSZ, conf=conf,
+        classes=[PERSON_CLASS_ID], verbose=False,
+    )
+    for box in person_results[0].boxes:
+        x1, y1, x2, y2 = box.xyxy[0].tolist()
+        result["detections"].append({
+            "class_id":   -1,
+            "class_name": "person",
+            "confidence": round(float(box.conf), 4),
+            "bbox": {
+                "x1": round(x1),
+                "y1": round(y1),
+                "x2": round(x2),
+                "y2": round(y2),
+            },
+        })
+
+    return result

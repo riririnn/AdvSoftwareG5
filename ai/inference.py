@@ -115,7 +115,7 @@ def predict_all(model: YOLO, person_model: YOLO, source, conf: float = DEFAULT_C
         result["detections"].append({
             "class_id":   -1,
             "class_name": "person",
-            "confidence": round(float(box.conf), 4),
+            "confidence": round(float(box.conf.item()), 4),
             "bbox": {
                 "x1": round(x1),
                 "y1": round(y1),

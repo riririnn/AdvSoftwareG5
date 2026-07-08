@@ -82,9 +82,10 @@ def load_processed_session_ids():
 
 def save_processed_session_ids():
     data = {session_id: True for session_id in sorted(processed_session_ids)}
-
-    with open(PROCESSED_SESSIONS_FILE, "w", encoding="utf-8") as f:
+    tmp_path = PROCESSED_SESSIONS_FILE.with_suffix(".tmp")
+    with open(tmp_path, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
+    tmp_path.replace(PROCESSED_SESSIONS_FILE)
 
 
 processed_session_ids = load_processed_session_ids()

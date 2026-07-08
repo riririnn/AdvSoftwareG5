@@ -1,0 +1,13 @@
+{
+  "session_id": "20260703_214200",
+  "status": "finished",
+  "theft_check": {
+    "judgement": "theft",
+    "purchase_amount": 150,
+    "paid_amount": 0,
+    "shortage": 150,
+    "decreased_vegetables_weight": {
+      "asparagus__100g__150yen": 1
+    }
+  }
+}

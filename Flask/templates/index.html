@@ -1,469 +1,754 @@
 <!DOCTYPE html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <title>無人販売支援システム 管理画面</title>
-    <link rel="stylesheet" href="/static/style.css">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>無人販売支援システム</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
 </head>
 <body>
-    <header>
-        <h1>無人販売支援システム 管理画面</h1>
-        <p>在庫・売上・通知状況を確認する画面</p>
-    </header>
-
-    <main>
-        <section class="card">
-            <h2>商品登録・更新</h2>
-            <p>
-                商品名・価格・在庫数・単重量を入力して、商品情報を登録または更新できます。
-                商品補充時も、この画面で在庫数を更新します。
-            </p>
-
-            <div class="form-row">
+    <div class="app-shell">
+        <header class="top-header">
+            <div class="brand">
+                <div class="brand-icon">🛒</div>
                 <div>
-                    <label for="product-name">商品名</label>
-                    <input type="text" id="product-name" placeholder="例：トマト">
+                    <h1>無人販売支援システム</h1>
+                    <p>管理画面</p>
                 </div>
-
-                <div>
-                    <label for="product-price">価格</label>
-                    <input type="number" id="product-price" placeholder="例：150" min="0">
-                </div>
-
-                <div>
-                    <label for="product-count">在庫数</label>
-                    <input type="number" id="product-count" placeholder="例：10" min="0">
-                </div>
-
-                <div>
-                    <label for="product-weight">単重量(g)</label>
-                    <input type="number" id="product-weight" placeholder="例：100" min="0">
-                </div>
-
-                <button onclick="addOrUpdateProduct()">登録・更新</button>
             </div>
-        </section>
 
-        <section class="card">
-            <h2>現在の在庫</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>商品名</th>
-                        <th>価格</th>
-                        <th>在庫数</th>
-                        <th>単重量</th>
-                        <th>操作</th>
-                    </tr>
-                </thead>
-                <tbody id="inventory-table">
-                    {% for item, count in inventory.items() %}
-                    <tr>
-                        <td>{{ item }}</td>
-                        <td>{{ products[item].price }} 円</td>
-                        <td>{{ count }}</td>
-                        <td>{{ products[item].weight }} g</td>
-                        <td>
-                            <button class="danger" onclick="deleteProduct('{{ item }}')">削除</button>
-                        </td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </section>
+            <nav class="desktop-nav" aria-label="メインメニュー">
+                <button class="nav-item active" data-page="home">⌂<span>ホーム</span></button>
+                <button class="nav-item" data-page="inventory">□<span>在庫</span></button>
+                <button class="nav-item" data-page="notifications">♢<span>通知</span></button>
+            </nav>
 
-        <section class="card">
-            <h2>売上履歴</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>時刻</th>
-                        <th>商品名</th>
-                        <th>個数</th>
-                        <th>金額</th>
-                    </tr>
-                </thead>
-                <tbody id="sales-table">
-                    {% for sale in sales_history %}
-                    <tr>
-                        <td>{{ sale.time }}</td>
-                        <td>{{ sale.item_name }}</td>
-                        <td>{{ sale.quantity }}</td>
-                        <td>{{ sale.amount }} 円</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </section>
+            <button class="header-notification" type="button" data-page="notifications" aria-label="通知を開く">
+                🔔<span id="headerNotifyBadge" class="badge hidden">0</span>
+            </button>
+        </header>
 
-        <section class="card">
-            <h2>通知履歴</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>時刻</th>
-                        <th>通知種別</th>
-                        <th>商品名</th>
-                        <th>個数</th>
-                        <th>金額</th>
-                    </tr>
-                </thead>
-                <tbody id="notification-table">
-                    {% for notice in notification_history %}
-                    <tr>
-                        <td>{{ notice.time }}</td>
-                        <td>{{ notice.type }}</td>
-                        <td>{{ notice.item_name }}</td>
-                        <td>{{ notice.quantity }}</td>
-                        <td>{{ notice.amount }} 円</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </section>
+        <main class="main-content">
+            <section id="page-home" class="page active">
+                <div class="mobile-page-title">
+                    <span class="section-icon">▮</span>
+                    <h2>ホーム</h2>
+                </div>
 
-        <section class="card">
-            <h2>AI認識結果履歴</h2>
-            <table>
-                <thead>
-                    <tr>
-                        <th>時刻</th>
-                        <th>認識商品</th>
-                        <th>認識個数</th>
-                    </tr>
-                </thead>
-                <tbody id="ai-history-table">
-                    {% for ai in ai_history %}
-                    <tr>
-                        <td>{{ ai.time }}</td>
-                        <td>{{ ai.item_name }}</td>
-                        <td>{{ ai.count }}</td>
-                    </tr>
-                    {% endfor %}
-                </tbody>
-            </table>
-        </section>
+                <div class="summary-grid">
+                    <article class="summary-card green-soft">
+                        <div class="summary-icon">□</div>
+                        <div>
+                            <p>登録商品数</p>
+                            <strong id="summaryRegistered">0</strong><span>件</span>
+                        </div>
+                    </article>
+                    <article class="summary-card green-soft">
+                        <div class="summary-icon">¥</div>
+                        <div>
+                            <p>今月の売り上げ</p>
+                            <strong id="summaryMonthlySales">0</strong><span>円</span>
+                        </div>
+                    </article>
+                    <article class="summary-card blue-soft">
+                        <div class="summary-icon">¥</div>
+                        <div>
+                            <p>売上履歴件数</p>
+                            <strong id="summarySales">0</strong><span>件</span>
+                        </div>
+                    </article>
+                    <article class="summary-card orange-soft">
+                        <div class="summary-icon">🔔</div>
+                        <div>
+                            <p>通知履歴件数</p>
+                            <strong id="summaryNotifications">0</strong><span>件</span>
+                        </div>
+                    </article>
+                </div>
 
-        <section class="card">
-            <h2>最新セッション結果</h2>
-            <p>
-                app側で作成された最新のsession.jsonを読み込み、
-                購入結果や万引き判定結果を表示します。
-            </p>
+                <div class="home-grid">
+                    <section class="card session-card">
+                        <div class="card-header">
+                            <div>
+                                <span class="section-icon">▤</span>
+                                <h2>session.json クイック操作</h2>
+                            </div>
+                        </div>
+                        <div class="session-controls">
+                            <button class="action-tile" type="button" onclick="importLatestSession()">
+                                <span class="tile-icon">↥</span>
+                                <strong>最新session.json取込</strong>
+                                <small>既存の最新sessionを取込みます</small>
+                            </button>
+                            <div class="generate-box">
+                                <label for="generateJudgement">生成判定</label>
+                                <select id="generateJudgement">
+                                    <option value="normal">購入 normal</option>
+                                    <option value="theft">万引き theft</option>
+                                </select>
+                                <button class="action-tile" type="button" onclick="generateAndImportSession()">
+                                    <span class="tile-icon">⚙</span>
+                                    <strong>session生成・取込</strong>
+                                    <small>新しいsessionを作成します</small>
+                                </button>
+                            </div>
+                        </div>
+                    </section>
 
-            <table>
-                <thead>
-                    <tr>
-                        <th>セッションID</th>
-                        <th>状態</th>
-                        <th>判定</th>
-                        <th>購入金額</th>
-                        <th>支払金額</th>
-                        <th>不足金額</th>
-                        <th>減少商品</th>
-                    </tr>
-                </thead>
-                <tbody id="latest-session-table">
-                    <tr>
-                        <td colspan="7">session.jsonはまだ読み込まれていません。</td>
-                    </tr>
-                </tbody>
-            </table>
+                    <section class="card">
+                        <div class="card-header">
+                            <div>
+                                <span class="section-icon">□</span>
+                                <h2>最近の在庫</h2>
+                            </div>
+                            <button class="link-button" type="button" data-page="inventory">すべて見る ›</button>
+                        </div>
+                        <div id="homeInventoryPreview" class="preview-list"></div>
+                    </section>
 
-            <button onclick="importLatestSession()">最新セッションを履歴に反映</button>
-        </section>
+                    <section class="card">
+                        <div class="card-header orange-header">
+                            <div>
+                                <span class="section-icon">🔔</span>
+                                <h2>最近の通知</h2>
+                            </div>
+                            <button class="link-button orange-link" type="button" data-page="notifications">すべて見る ›</button>
+                        </div>
+                        <div id="homeNotificationPreview" class="preview-list compact"></div>
+                    </section>
 
-        <section class="card">
-            <h2>動作テスト</h2>
-            <button onclick="sendTestPurchase()">購入通知テスト</button>
-            <button class="danger" onclick="sendTestShoplifting()">万引き通知テスト</button>
-            <button class="ai-button" onclick="sendTestAIInventory()">AI認識結果テスト</button>
-        </section>
-    </main>
+                    <section class="card">
+                        <div class="card-header">
+                            <div>
+                                <span class="section-icon">¥</span>
+                                <h2>最近の売上</h2>
+                            </div>
+                        </div>
+                        <div id="homeSalesPreview" class="preview-list compact"></div>
+                    </section>
+                </div>
+            </section>
 
-    <script>
-        async function updateInventory() {
-            const inventoryResponse = await fetch("/api/inventory");
-            const inventory = await inventoryResponse.json();
+            <section id="page-inventory" class="page">
+                <div class="page-heading">
+                    <span class="section-icon">□</span>
+                    <h2>在庫管理</h2>
+                </div>
 
-            const productsResponse = await fetch("/api/products");
-            const products = await productsResponse.json();
+                <div class="inventory-layout">
+                    <section class="card product-card">
+                        <div class="card-header">
+                            <div>
+                                <span class="section-icon">＋</span>
+                                <h2>商品登録</h2>
+                            </div>
+                        </div>
+                        <form id="productForm" class="product-form">
+                            <label>
+                                商品名
+                                <select id="productSelect" required></select>
+                            </label>
+                            <div id="selectedProductPreview" class="product-select-preview"></div>
+                            <label>
+                                価格（円）
+                                <input id="productPrice" type="number" min="0" placeholder="例）150" required />
+                            </label>
+                            <label>
+                                在庫数
+                                <input id="productCount" type="number" min="0" placeholder="例）10" required />
+                            </label>
+                            <label>
+                                単重量（g）
+                                <input id="productWeight" type="number" min="1" placeholder="例）100" required />
+                            </label>
+                            <button class="primary-button" type="submit">＋ 登録</button>
+                        </form>
+                    </section>
 
-            const table = document.getElementById("inventory-table");
-            table.innerHTML = "";
+                    <section class="card inventory-card">
+                        <div class="card-header">
+                            <div>
+                                <span class="section-icon">□</span>
+                                <h2>現在の在庫</h2>
+                            </div>
+                            <button class="link-button" type="button" onclick="refreshAll()">↻ 在庫を更新</button>
+                        </div>
+                        <div class="inventory-head desktop-only">
+                            <span>商品名</span>
+                            <span>価格</span>
+                            <span>在庫数</span>
+                            <span>単重量</span>
+                            <span>操作</span>
+                        </div>
+                        <div id="inventoryList" class="inventory-list"></div>
+                    </section>
 
-            for (const [item, count] of Object.entries(inventory)) {
-                const price = products[item] ? products[item].price : 0;
-                const weight = products[item] ? products[item].weight : 0;
+                    <section class="card sensor-card">
+                        <div class="card-header">
+                            <div>
+                                <span class="section-icon">▧</span>
+                                <h2>重量センサー設定</h2>
+                            </div>
+                        </div>
+                        <div id="sensorList" class="sensor-list"></div>
+                        <button class="secondary-button full" type="button" onclick="addSensor()">＋ センサーを追加</button>
+                    </section>
+                </div>
+            </section>
 
-                table.innerHTML += `
-                    <tr>
-                        <td>${item}</td>
-                        <td>${price} 円</td>
-                        <td>${count}</td>
-                        <td>${weight} g</td>
-                        <td>
-                            <button class="danger" onclick="deleteProduct('${item}')">削除</button>
-                        </td>
-                    </tr>
-                `;
-            }
+            <section id="page-notifications" class="page">
+                <div class="page-heading">
+                    <span class="section-icon">🔔</span>
+                    <h2>通知</h2>
+                </div>
+
+                <div class="filter-row" role="tablist" aria-label="通知フィルター">
+                    <button class="filter-chip active" data-filter="all">すべて</button>
+                    <button class="filter-chip blue" data-filter="購入通知">購入通知</button>
+                    <button class="filter-chip orange" data-filter="万引き通知">万引き通知</button>
+                </div>
+
+                <section class="card notification-card">
+                    <div class="notification-head desktop-only">
+                        <span>通知種別</span>
+                        <span>商品名</span>
+                        <span>数量</span>
+                        <span>金額・不足額</span>
+                        <span>時刻</span>
+                    </div>
+                    <div id="notificationList" class="notification-list"></div>
+                </section>
+            </section>
+        </main>
+
+        <nav class="bottom-nav" aria-label="スマートフォン用メニュー">
+            <button class="bottom-item active" data-page="home">⌂<span>ホーム</span></button>
+            <button class="bottom-item" data-page="inventory">□<span>在庫</span></button>
+            <button class="bottom-item" data-page="notifications">🔔<span>通知</span><span id="bottomNotifyBadge" class="badge hidden">0</span></button>
+        </nav>
+    </div>
+
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+
+<script>
+function productImagePath(product) {
+    if (!product || !product.label) {
+        return '/static/products/default.png';
+    }
+
+    const fileName = String(product.label).replaceAll(' ', '_');
+    return `/static/products/${fileName}.png`;
+}
+
+function productImageHtml(product, className = 'product-image') {
+    const name = product?.display_name || product?.label || '商品';
+    return `
+        <img
+            src="${productImagePath(product)}"
+            alt="${escapeAttr(name)}"
+            class="${className}"
+            loading="lazy"
+            onerror="this.onerror=null; this.src='/static/products/default.png';"
+        >
+    `;
+}
+
+function productMiniHtml(product, fallbackText = '') {
+    if (!product) {
+        return `<div class="empty-state small">${escapeHtml(fallbackText || '商品が選択されていません。')}</div>`;
+    }
+
+    return `
+        <div class="product-mini">
+            <span class="item-avatar image-avatar">${productImageHtml(product)}</span>
+            <div class="product-mini-text">
+                <strong>${escapeHtml(product.display_name || product.label || '-')}</strong>
+                <small>${escapeHtml(product.label || '-')}</small>
+            </div>
+        </div>
+    `;
+}
+
+const state = {
+    products: {},
+    inventory: {},
+    sales: [],
+    notifications: [],
+    weightSensors: { weight_sensor_count: 1, weight_sensor_targets: {} },
+    notificationFilter: 'all'
+};
+
+function yen(value) {
+    const n = Number(value || 0);
+    return `${n.toLocaleString('ja-JP')}円`;
+}
+
+function shortDate(value) {
+    if (!value) return '-';
+    return String(value).replace(/^\d{4}\//, '').replace(/:\d{2}$/, '');
+}
+
+function productTitle(productId) {
+    const p = state.products[productId] || {};
+    return p.display_name || productId;
+}
+
+function variantText(productId) {
+    const p = state.products[productId] || {};
+    return `${p.display_name || productId}（${p.weight || 0}g・${p.price || 0}円）`;
+}
+
+function inventoryEntries() {
+    return Object.entries(state.inventory)
+        .filter(([id]) => state.products[id])
+        .map(([id, count]) => ({ id, count: Number(count || 0), product: state.products[id] }));
+}
+
+function visibleNotifications() {
+    return state.notifications.filter(n => n.type !== '判定エラー');
+}
+
+async function apiJson(url, options = {}) {
+    const res = await fetch(url, {
+        headers: { 'Content-Type': 'application/json' },
+        ...options
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+        throw new Error(data.message || `通信に失敗しました: ${res.status}`);
+    }
+    return data;
+}
+
+async function refreshAll(options = {}) {
+    try {
+        const [products, inventory, sales, notifications, weightSensors] = await Promise.all([
+            apiJson('/api/products'),
+            apiJson('/api/inventory'),
+            apiJson('/api/sales'),
+            apiJson('/api/notifications'),
+            apiJson('/api/weight_sensors')
+        ]);
+
+        state.products = products || {};
+        state.inventory = inventory || {};
+        state.sales = sales || [];
+        state.notifications = notifications || [];
+        state.weightSensors = weightSensors.settings || { weight_sensor_count: 1, weight_sensor_targets: {} };
+
+        renderAll();
+        if (options.toast) showToast('最新の情報に更新しました。');
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
+}
+
+function renderAll() {
+    renderProductSelect();
+    renderSummary();
+    renderHome();
+    renderInventory();
+    renderWeightSensors();
+    renderNotifications();
+}
+
+function renderProductSelect() {
+    const select = document.getElementById('productSelect');
+    const current = select.value;
+    const unique = new Map();
+
+    for (const product of Object.values(state.products)) {
+        if (!product || !product.label) continue;
+        if (!unique.has(product.label)) {
+            unique.set(product.label, product.display_name || product.label);
+        }
+    }
+
+    select.innerHTML = [...unique.entries()]
+        .sort((a, b) => a[1].localeCompare(b[1], 'ja'))
+        .map(([label, display]) => `<option value="${escapeHtml(label)}">${escapeHtml(display)}</option>`)
+        .join('');
+
+    if (current) select.value = current;
+    renderSelectedProductPreview();
+}
+
+function getProductByLabel(label) {
+    return Object.values(state.products).find(product => product && product.label === label) || null;
+}
+
+function renderSelectedProductPreview() {
+    const preview = document.getElementById('selectedProductPreview');
+    const select = document.getElementById('productSelect');
+
+    if (!preview || !select) return;
+
+    const product = getProductByLabel(select.value);
+    preview.innerHTML = product
+        ? productMiniHtml(product)
+        : `<div class="empty-state small">商品を選択してください。</div>`;
+}
+
+function getMonthlySalesAmount() {
+    const now = new Date();
+    const currentYear = now.getFullYear();
+    const currentMonth = now.getMonth() + 1;
+
+    return state.sales.reduce((sum, sale) => {
+        const timeText = String(sale.time || '');
+        const matched = timeText.match(/^(\d{4})\/(\d{1,2})\//);
+
+        if (!matched) {
+            return sum;
         }
 
-        async function updateSales() {
-            const response = await fetch("/api/sales");
-            const sales = await response.json();
+        const saleYear = Number(matched[1]);
+        const saleMonth = Number(matched[2]);
 
-            const table = document.getElementById("sales-table");
-            table.innerHTML = "";
-
-            for (const sale of sales) {
-                table.innerHTML += `
-                    <tr>
-                        <td>${sale.time}</td>
-                        <td>${sale.item_name}</td>
-                        <td>${sale.quantity}</td>
-                        <td>${sale.amount} 円</td>
-                    </tr>
-                `;
-            }
+        if (saleYear !== currentYear || saleMonth !== currentMonth) {
+            return sum;
         }
 
-        async function updateNotifications() {
-            const response = await fetch("/api/notifications");
-            const notifications = await response.json();
+        return sum + Number(sale.amount || 0);
+    }, 0);
+}
 
-            const table = document.getElementById("notification-table");
-            table.innerHTML = "";
+function renderSummary() {
+    const entries = inventoryEntries();
+    const monthlySales = getMonthlySalesAmount();
+    document.getElementById('summaryRegistered').textContent = entries.length;
+    document.getElementById('summaryMonthlySales').textContent = monthlySales.toLocaleString('ja-JP');
+    document.getElementById('summarySales').textContent = state.sales.length;
+    document.getElementById('summaryNotifications').textContent = visibleNotifications().length;
 
-            for (const notice of notifications) {
-                table.innerHTML += `
-                    <tr>
-                        <td>${notice.time}</td>
-                        <td>${notice.type}</td>
-                        <td>${notice.item_name}</td>
-                        <td>${notice.quantity}</td>
-                        <td>${notice.amount} 円</td>
-                    </tr>
-                `;
-            }
-        }
+    const badgeValue = visibleNotifications().length;
+    for (const id of ['headerNotifyBadge', 'bottomNotifyBadge']) {
+        const el = document.getElementById(id);
+        el.textContent = badgeValue;
+        el.classList.toggle('hidden', badgeValue === 0);
+    }
+}
 
-        async function updateAIHistory() {
-            const response = await fetch("/api/ai_history");
-            const aiHistory = await response.json();
+function renderHome() {
+    const inv = inventoryEntries().slice(0, 4);
+    const homeInv = document.getElementById('homeInventoryPreview');
+    homeInv.innerHTML = inv.length ? inv.map(({ id, count, product }) => `
+        <div class="preview-row">
+            <div class="item-main">
+                <span class="item-avatar image-avatar">${productImageHtml(product)}</span>
+                <div>
+                    <strong>${escapeHtml(product.display_name || id)}</strong>
+                    <small class="product-label-line">${escapeHtml(product.label || '-')}</small>
+                </div>
+            </div>
+            <span>${yen(product.price)}</span>
+            <span>在庫 ${count}</span>
+            <span>${product.weight}g</span>
+        </div>
+    `).join('') : emptyHtml('在庫が登録されていません。');
 
-            const table = document.getElementById("ai-history-table");
-            table.innerHTML = "";
+    const notes = visibleNotifications().slice(0, 3);
+    document.getElementById('homeNotificationPreview').innerHTML = notes.length ? notes.map(n => `
+        <div class="preview-row notification-preview-row">
+            <span class="type-badge ${typeClass(n.type)}">${escapeHtml(n.type || '-')}</span>
+            <strong>${escapeHtml(n.item_name || '-')}</strong>
+            <span>${notificationAmountText(n)}</span>
+            <small>${escapeHtml(shortDate(n.time))}</small>
+        </div>
+    `).join('') : emptyHtml('通知履歴はまだありません。');
 
-            for (const ai of aiHistory) {
-                table.innerHTML += `
-                    <tr>
-                        <td>${ai.time}</td>
-                        <td>${ai.item_name}</td>
-                        <td>${ai.count}</td>
-                    </tr>
-                `;
-            }
-        }
+    const sales = state.sales.slice(0, 3);
+    document.getElementById('homeSalesPreview').innerHTML = sales.length ? sales.map(s => `
+        <div class="preview-row">
+            <strong>${escapeHtml(s.item_name || '-')}</strong>
+            <span>${Number(s.quantity || 0)}個</span>
+            <span class="money">${yen(s.amount)}</span>
+            <small>${escapeHtml(shortDate(s.time))}</small>
+        </div>
+    `).join('') : emptyHtml('売上履歴はまだありません。');
+}
 
-        async function updateLatestSession() {
-            const table = document.getElementById("latest-session-table");
+function renderInventory() {
+    const list = document.getElementById('inventoryList');
+    const entries = inventoryEntries();
 
-            try {
-                const response = await fetch("/api/session/latest");
-                const data = await response.json();
+    list.innerHTML = entries.length ? entries.map(({ id, count, product }) => `
+        <article class="inventory-row">
+            <div class="item-main">
+                <span class="item-avatar image-avatar">${productImageHtml(product)}</span>
+                <div>
+                    <strong>${escapeHtml(product.display_name || id)}</strong>
+                    <small class="product-label-line">${escapeHtml(product.label || '-')}</small>
+                    <small class="mobile-only">${yen(product.price)} / ${product.weight}g</small>
+                </div>
+            </div>
+            <div class="desktop-price money">${yen(product.price)}</div>
+            <div class="stock-value"><strong>${count}</strong><small>個</small></div>
+            <div class="desktop-weight">${product.weight}g</div>
+            <div class="row-actions">
+                <button class="outline-green" type="button" onclick="changeInventory('${escapeAttr(id)}', ${count})">在庫変更</button>
+                <button class="outline-red" type="button" onclick="deleteProduct('${escapeAttr(id)}')">削除</button>
+            </div>
+        </article>
+    `).join('') : emptyHtml('現在の在庫はありません。商品登録から追加してください。');
+}
 
-                if (data.status !== "success") {
-                    table.innerHTML = `
-                        <tr>
-                            <td colspan="7">${data.message}</td>
-                        </tr>
-                    `;
-                    return;
-                }
+function renderWeightSensors() {
+    const container = document.getElementById('sensorList');
+    const settings = state.weightSensors || {};
+    const count = Number(settings.weight_sensor_count || 1);
+    const targets = settings.weight_sensor_targets || {};
+    const options = inventoryEntries();
 
-                const session = data.session;
-                const theftCheck = session.theft_check || {};
-                const decreasedVegetables = theftCheck.decreased_vegetables_weight || {};
-                const decreasedText = Object.keys(decreasedVegetables).length > 0
-                    ? Object.entries(decreasedVegetables)
-                        .map(([name, count]) => `${name}: ${count}`)
-                        .join(" / ")
-                    : "なし";
+    container.innerHTML = Array.from({ length: count }, (_, i) => {
+        const sensorId = `sensor_${i + 1}`;
+        const selected = targets[sensorId] || '';
+        const selectedProduct = selected ? state.products[selected] : null;
 
-                table.innerHTML = `
-                    <tr>
-                        <td>${session.session_id || "-"}</td>
-                        <td>${session.status || "-"}</td>
-                        <td>${theftCheck.judgement || "-"}</td>
-                        <td>${theftCheck.purchase_amount ?? "-"} 円</td>
-                        <td>${theftCheck.paid_amount ?? "-"} 円</td>
-                        <td>${theftCheck.shortage ?? "-"} 円</td>
-                        <td>${decreasedText}</td>
-                    </tr>
-                `;
-            } catch (error) {
-                table.innerHTML = `
-                    <tr>
-                        <td colspan="7">session.jsonの読み込みに失敗しました。</td>
-                    </tr>
-                `;
-            }
-        }
+        return `
+            <div class="sensor-row">
+                <strong>${sensorId}</strong>
+                <select id="sensorSelect_${sensorId}" onchange="updateSensorPreview('${sensorId}')">
+                    <option value="">未設定</option>
+                    ${options.map(({ id, count, product }) => `
+                        <option value="${escapeAttr(id)}" ${id === selected ? 'selected' : ''}>${escapeHtml(product.display_name || id)}（${product.weight}g・${product.price}円 / 在庫:${count}）</option>
+                    `).join('')}
+                </select>
+                <div id="sensorPreview_${sensorId}" class="sensor-selected-preview ${selectedProduct ? '' : 'empty'}">
+                    ${selectedProduct ? productMiniHtml(selectedProduct) : '商品が選択されていません。'}
+                </div>
+                <div class="sensor-actions">
+                    <button class="outline-green" type="button" onclick="saveSensor('${sensorId}')">保存</button>
+                    ${sensorId !== 'sensor_1' ? `<button class="outline-red" type="button" onclick="deleteSensor('${sensorId}')">削除</button>` : ''}
+                </div>
+            </div>
+        `;
+    }).join('');
+}
 
-        async function importLatestSession() {
-            const response = await fetch("/api/session/import", {
-                method: "POST"
-            });
+function updateSensorPreview(sensorId) {
+    const select = document.getElementById(`sensorSelect_${sensorId}`);
+    const preview = document.getElementById(`sensorPreview_${sensorId}`);
 
-            const data = await response.json();
+    if (!select || !preview) return;
 
-            if (data.status === "success") {
-                alert("session.jsonの内容を履歴に反映しました。");
-            } else if (data.status === "skipped") {
-                alert("このsession.jsonはすでに履歴へ反映済みです。");
-            } else {
-                alert(data.message || "session.jsonの反映に失敗しました。");
-            }
+    const product = state.products[select.value] || null;
+    preview.classList.toggle('empty', !product);
+    preview.innerHTML = product
+        ? productMiniHtml(product)
+        : '商品が選択されていません。';
+}
 
-            await updateSales();
-            await updateNotifications();
-            await updateLatestSession();
-        }
+function renderNotifications() {
+    const list = document.getElementById('notificationList');
+    const filtered = visibleNotifications().filter(n => state.notificationFilter === 'all' || n.type === state.notificationFilter);
 
-        async function addOrUpdateProduct() {
-            const itemName = document.getElementById("product-name").value;
-            const price = Number(document.getElementById("product-price").value);
-            const count = Number(document.getElementById("product-count").value);
-            const weight = Number(document.getElementById("product-weight").value);
+    list.innerHTML = filtered.length ? filtered.map(n => `
+        <article class="notification-row">
+            <div><span class="type-badge ${typeClass(n.type)}">${escapeHtml(n.type || '-')}</span></div>
+            <strong>${escapeHtml(n.item_name || '-')}</strong>
+            <span>${Number(n.quantity || 0) || '-'}${Number(n.quantity || 0) ? '個' : ''}</span>
+            <span class="${n.type === '万引き通知' ? 'danger-text' : 'money'}">${notificationAmountText(n)}</span>
+            <small>${escapeHtml(shortDate(n.time))}</small>
+        </article>
+    `).join('') : emptyHtml('表示する通知履歴はありません。');
+}
 
-            if (!itemName || price < 0 || count < 0 || weight <= 0) {
-                alert("商品名・価格・在庫数・単重量を正しく入力してください。");
-                return;
-            }
+function notificationAmountText(n) {
+    const amount = Number(n.amount || 0);
+    if (n.type === '万引き通知') return `不足 ${amount.toLocaleString('ja-JP')}円`;
+    return yen(amount);
+}
 
-            const response = await fetch("/api/product", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    item_name: itemName,
-                    price: price,
-                    count: count,
-                    weight: weight
-                })
-            });
+function typeClass(type) {
+    if (type === '購入通知') return 'blue';
+    if (type === '万引き通知') return 'orange';
+    return 'green';
+}
 
-            const data = await response.json();
+async function addSensor() {
+    const current = Number(state.weightSensors.weight_sensor_count || 1);
+    try {
+        await apiJson('/api/weight_sensors/count', {
+            method: 'POST',
+            body: JSON.stringify({ count: current + 1 })
+        });
+        await refreshAll();
+        showToast('重量センサーを追加しました。');
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
+}
 
-            if (data.status === "success") {
-                alert("商品情報を登録・更新しました。");
+async function saveSensor(sensorId) {
+    const select = document.getElementById(`sensorSelect_${sensorId}`);
+    try {
+        await apiJson('/api/weight_sensors/target', {
+            method: 'POST',
+            body: JSON.stringify({ sensor_id: sensorId, item_name: select.value })
+        });
+        await refreshAll();
+        showToast(`${sensorId} の設置商品を保存しました。`);
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
+}
 
-                document.getElementById("product-name").value = "";
-                document.getElementById("product-price").value = "";
-                document.getElementById("product-count").value = "";
-                document.getElementById("product-weight").value = "";
+async function deleteSensor(sensorId) {
+    if (sensorId === 'sensor_1') {
+        showToast('sensor_1 は削除できません。', 'error');
+        return;
+    }
 
-                await updateInventory();
-            } else {
-                alert("商品情報の登録・更新に失敗しました。");
-            }
-        }
+    if (!window.confirm(`${sensorId} を削除しますか？削除後、センサー番号は自動で詰め直されます。`)) {
+        return;
+    }
 
-        async function deleteProduct(itemName) {
-            const result = confirm(`${itemName} を削除しますか？`);
+    try {
+        await apiJson('/api/weight_sensors/delete', {
+            method: 'POST',
+            body: JSON.stringify({ sensor_id: sensorId })
+        });
+        await refreshAll();
+        showToast(`${sensorId} を削除しました。`);
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
+}
 
-            if (!result) {
-                return;
-            }
+async function changeInventory(productId, currentCount) {
+    const value = window.prompt('新しい在庫数を入力してください。', currentCount);
+    if (value === null) return;
+    const count = Number(value);
+    if (!Number.isInteger(count) || count < 0) {
+        showToast('在庫数は0以上の整数で入力してください。', 'error');
+        return;
+    }
+    try {
+        await apiJson('/api/inventory/update', {
+            method: 'POST',
+            body: JSON.stringify({ item_name: productId, count })
+        });
+        await refreshAll();
+        showToast('在庫数を変更しました。');
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
+}
 
-            const response = await fetch("/api/product/delete", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    item_name: itemName
-                })
-            });
+async function deleteProduct(productId) {
+    if (!confirm(`${variantText(productId)} を削除しますか？`)) return;
+    try {
+        await apiJson('/api/product/delete', {
+            method: 'POST',
+            body: JSON.stringify({ item_name: productId })
+        });
+        await refreshAll();
+        showToast('商品を削除しました。');
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
+}
 
-            const data = await response.json();
+async function importLatestSession() {
+    try {
+        const result = await apiJson('/api/session/import/latest', { method: 'POST', body: '{}' });
+        await refreshAll();
+        showToast(result.message || '最新session.jsonを取り込みました。');
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
+}
 
-            if (data.status === "success") {
-                alert("商品を削除しました。");
+async function generateAndImportSession() {
+    const judgement = document.getElementById('generateJudgement').value;
+    try {
+        const result = await apiJson('/api/session/generate-and-import', {
+            method: 'POST',
+            body: JSON.stringify({ judgement })
+        });
+        await refreshAll();
+        showToast(result.message || 'session.jsonを生成して取り込みました。');
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
+}
 
-                await updateInventory();
-                await updateSales();
-                await updateNotifications();
-                await updateAIHistory();
-            } else {
-                alert("商品の削除に失敗しました。");
-            }
-        }
+document.getElementById('productForm').addEventListener('submit', async (event) => {
+    event.preventDefault();
+    const select = document.getElementById('productSelect');
+    const option = select.options[select.selectedIndex];
+    const itemLabel = select.value;
+    const itemName = option?.textContent || itemLabel;
 
-        async function sendTestPurchase() {
-            await fetch("/api/purchase", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    item_name: "トマト",
-                    quantity: 2
-                })
-            });
+    const payload = {
+        item_name: itemName,
+        item_label: itemLabel,
+        price: Number(document.getElementById('productPrice').value),
+        count: Number(document.getElementById('productCount').value),
+        weight: Number(document.getElementById('productWeight').value)
+    };
 
-            await updateInventory();
-            await updateSales();
-            await updateNotifications();
-        }
+    try {
+        const result = await apiJson('/api/product', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+        document.getElementById('productForm').reset();
+        await refreshAll();
+        showToast(result.message || '商品を登録しました。');
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
+});
 
-        async function sendTestShoplifting() {
-            await fetch("/api/shoplifting", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    item_name: "トマト",
-                    quantity: 2
-                })
-            });
+document.getElementById('productSelect').addEventListener('change', renderSelectedProductPreview);
 
-            await updateNotifications();
-        }
+document.querySelectorAll('[data-page]').forEach(button => {
+    button.addEventListener('click', () => switchPage(button.dataset.page));
+});
 
-        async function sendTestAIInventory() {
-            await fetch("/api/ai_inventory", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json"
-                },
-                body: JSON.stringify({
-                    items: [
-                        { item_name: "トマト", count: 6 },
-                        { item_name: "きゅうり", count: 4 },
-                        { item_name: "なす", count: 3 },
-                        { item_name: "ピーマン", count: 5 }
-                    ]
-                })
-            });
+document.querySelectorAll('.filter-chip').forEach(button => {
+    button.addEventListener('click', () => {
+        document.querySelectorAll('.filter-chip').forEach(b => b.classList.remove('active'));
+        button.classList.add('active');
+        state.notificationFilter = button.dataset.filter;
+        renderNotifications();
+    });
+});
 
-            await updateInventory();
-            await updateAIHistory();
-        }
+function switchPage(page) {
+    document.querySelectorAll('.page').forEach(el => el.classList.remove('active'));
+    document.getElementById(`page-${page}`).classList.add('active');
+    document.querySelectorAll('.nav-item, .bottom-item').forEach(btn => {
+        btn.classList.toggle('active', btn.dataset.page === page);
+    });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+}
 
-        setInterval(() => {
-            updateInventory();
-            updateSales();
-            updateNotifications();
-            updateAIHistory();
-            updateLatestSession();
-        }, 5000);
+function showToast(message, type = 'success') {
+    const toast = document.getElementById('toast');
+    toast.textContent = message;
+    toast.className = `toast show ${type}`;
+    clearTimeout(showToast.timer);
+    showToast.timer = setTimeout(() => toast.className = 'toast', 2800);
+}
 
-        updateLatestSession();
-    </script>
+function emptyHtml(message) {
+    return `<div class="empty-state">${escapeHtml(message)}</div>`;
+}
+
+function escapeHtml(value) {
+    return String(value ?? '').replace(/[&<>'"]/g, ch => ({
+        '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;'
+    }[ch]));
+}
+
+function escapeAttr(value) {
+    return escapeHtml(value).replace(/`/g, '&#96;');
+}
+
+refreshAll();
+</script>
 </body>
 </html>

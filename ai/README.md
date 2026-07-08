@@ -197,4 +197,4 @@ result = predict_all(model, person_model, frame)
 - **対策**: `predict()` の `conf` 引数を上げる（デフォルト0.25）か、`iou` 閾値を調整する
 
 ### モデルファイルの配布
-- `*.pt` はGit管理外（`.gitignore`）のため、サーバー移行時は `best.pt` を手動でコピーする必要がある
+- `ai/runs/vegetables_v1/weights/best.pt` はバックアップ目的でGit管理する（それ以外の `*.pt` は原則Git管理外）。

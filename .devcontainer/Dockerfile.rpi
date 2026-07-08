@@ -1,0 +1,31 @@
+FROM python:3.10-slim-bullseye
+
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+WORKDIR /workspace
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    libi2c-dev \
+    v4l-utils \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    git \
+    openssh-client \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# ラズパイ専用ライブラリ（GPIO・SPI）
+RUN pip install --no-cache-dir RPi.GPIO spidev
+
+# 推論のみ（学習はPC側で行う）
+# ultralytics はラズパイには重すぎるため tflite-runtime を使用
+RUN pip install --no-cache-dir \
+    opencv-python-headless \
+    pyyaml \
+    tflite-runtime
+
+COPY . /workspace
+
+CMD ["python", "app/main.py"]

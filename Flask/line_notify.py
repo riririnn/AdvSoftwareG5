@@ -30,7 +30,7 @@ def send_line_message(message):
     }
 
     try:
-        response = requests.post(url, headers=headers, json=payload)
+        response = requests.post(url, headers=headers, json=payload, timeout=10)
 
         print("========== LINE TEXT RESULT ==========")
         print("LINE text status:", response.status_code)

@@ -1,0 +1,365 @@
+{
+    "products": {
+        "asparagus__100g__100yen": {
+            "display_name": "アスパラガス",
+            "label": "asparagus",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "avocado__100g__100yen": {
+            "display_name": "アボカド",
+            "label": "avocado",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "banana__120g__120yen": {
+            "display_name": "バナナ",
+            "label": "banana",
+            "price": 120,
+            "weight": 120,
+            "active": true
+        },
+        "beans__100g__100yen": {
+            "display_name": "豆",
+            "label": "beans",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "beet__100g__100yen": {
+            "display_name": "ビーツ",
+            "label": "beet",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "bell_pepper__100g__100yen": {
+            "display_name": "パプリカ",
+            "label": "bell pepper",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "blackberry__100g__100yen": {
+            "display_name": "ブラックベリー",
+            "label": "blackberry",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "blueberry__100g__100yen": {
+            "display_name": "ブルーベリー",
+            "label": "blueberry",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "broccoli__100g__100yen": {
+            "display_name": "ブロッコリー",
+            "label": "broccoli",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "brussels_sprouts__100g__100yen": {
+            "display_name": "芽キャベツ",
+            "label": "brussels sprouts",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "cabbage__100g__100yen": {
+            "display_name": "キャベツ",
+            "label": "cabbage",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "carrot__100g__100yen": {
+            "display_name": "にんじん",
+            "label": "carrot",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "cauliflower__100g__100yen": {
+            "display_name": "カリフラワー",
+            "label": "cauliflower",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "celery__100g__100yen": {
+            "display_name": "セロリ",
+            "label": "celery",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "cherry__100g__100yen": {
+            "display_name": "さくらんぼ",
+            "label": "cherry",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "corn__100g__100yen": {
+            "display_name": "とうもろこし",
+            "label": "corn",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "cucumber__100g__100yen": {
+            "display_name": "きゅうり",
+            "label": "cucumber",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "egg__60g__100yen": {
+            "display_name": "卵",
+            "label": "egg",
+            "price": 100,
+            "weight": 60,
+            "active": true
+        },
+        "eggplant__80g__100yen": {
+            "display_name": "なす",
+            "label": "eggplant",
+            "price": 100,
+            "weight": 80,
+            "active": true
+        },
+        "garlic__100g__100yen": {
+            "display_name": "にんにく",
+            "label": "garlic",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "grape__100g__100yen": {
+            "display_name": "ぶどう",
+            "label": "grape",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "green_bean__100g__100yen": {
+            "display_name": "いんげん",
+            "label": "green bean",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "green_onion__100g__100yen": {
+            "display_name": "ねぎ",
+            "label": "green onion",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "hot_pepper__100g__100yen": {
+            "display_name": "唐辛子",
+            "label": "hot pepper",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "kiwi__100g__100yen": {
+            "display_name": "キウイ",
+            "label": "kiwi",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "lemon__100g__100yen": {
+            "display_name": "レモン",
+            "label": "lemon",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "lettuce__100g__100yen": {
+            "display_name": "レタス",
+            "label": "lettuce",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "lime__100g__100yen": {
+            "display_name": "ライム",
+            "label": "lime",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "mandarin__100g__100yen": {
+            "display_name": "みかん",
+            "label": "mandarin",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "mushroom__100g__100yen": {
+            "display_name": "きのこ",
+            "label": "mushroom",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "onion__100g__100yen": {
+            "display_name": "玉ねぎ",
+            "label": "onion",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "orange__180g__120yen": {
+            "display_name": "オレンジ",
+            "label": "orange",
+            "price": 120,
+            "weight": 180,
+            "active": true
+        },
+        "pattypan_squash__100g__100yen": {
+            "display_name": "パティパンスカッシュ",
+            "label": "pattypan squash",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "pea__100g__100yen": {
+            "display_name": "えんどう豆",
+            "label": "pea",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "peach__100g__100yen": {
+            "display_name": "桃",
+            "label": "peach",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "pear__100g__100yen": {
+            "display_name": "梨",
+            "label": "pear",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "pineapple__100g__100yen": {
+            "display_name": "パイナップル",
+            "label": "pineapple",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "potato__150g__80yen": {
+            "display_name": "じゃがいも",
+            "label": "potato",
+            "price": 80,
+            "weight": 150,
+            "active": true
+        },
+        "pumpkin__100g__100yen": {
+            "display_name": "かぼちゃ",
+            "label": "pumpkin",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "radish__100g__100yen": {
+            "display_name": "ラディッシュ",
+            "label": "radish",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "raspberry__100g__100yen": {
+            "display_name": "ラズベリー",
+            "label": "raspberry",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "strawberry__100g__100yen": {
+            "display_name": "いちご",
+            "label": "strawberry",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "tomato__100g__150yen": {
+            "display_name": "トマト",
+            "label": "tomato",
+            "price": 150,
+            "weight": 100,
+            "active": true
+        },
+        "vegetable_marrow__100g__100yen": {
+            "display_name": "ベジタブルマロー",
+            "label": "vegetable marrow",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "watermelon__100g__100yen": {
+            "display_name": "すいか",
+            "label": "watermelon",
+            "price": 100,
+            "weight": 100,
+            "active": true
+        },
+        "asparagus__100g__150yen": {
+            "display_name": "アスパラガス",
+            "label": "asparagus",
+            "price": 150,
+            "weight": 100,
+            "active": true
+        }
+    },
+    "inventory": {
+        "asparagus__100g__150yen": 7
+    },
+    "weight_sensor_count": 1,
+    "weight_sensor_targets": {
+        "sensor_1": "asparagus__100g__150yen"
+    },
+    "sales_history": [
+        {
+            "time": "2026/07/03 21:41:53",
+            "item_name": "アスパラガス",
+            "quantity": 1,
+            "amount": 150
+        }
+    ],
+    "notification_history": [
+        {
+            "time": "2026/07/03 21:42:56",
+            "type": "万引き通知",
+            "item_name": "アスパラガス",
+            "quantity": 1,
+            "amount": 150
+        },
+        {
+            "time": "2026/07/03 21:42:00",
+            "type": "万引き通知",
+            "item_name": "アスパラガス",
+            "quantity": 1,
+            "amount": 150
+        },
+        {
+            "time": "2026/07/03 21:41:53",
+            "type": "購入通知",
+            "item_name": "アスパラガス",
+            "quantity": 1,
+            "amount": 150
+        }
+    ],
+    "ai_history": []
+}

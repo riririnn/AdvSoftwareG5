@@ -1187,7 +1187,10 @@ def api_get_weight_sensors():
 @app.route("/api/weight_sensors/count", methods=["POST"])
 def api_set_weight_sensor_count():
     data = request.json or {}
-    count = int(data.get("count", 0))
+    try:
+        count = int(data.get("count", 0))
+    except Exception:
+        return jsonify({"status": "error", "message": "重量センサーの個数は数値で入力してください。"}), 400
 
     if count <= 0:
         return jsonify({

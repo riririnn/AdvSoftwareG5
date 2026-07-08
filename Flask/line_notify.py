@@ -90,7 +90,7 @@ def send_line_video_message(text_message, video_url, preview_image_url):
     }
 
     try:
-        response = requests.post(url, headers=headers, json=payload)
+        response = requests.post(url, headers=headers, json=payload, timeout=10)
 
         print("========== LINE VIDEO RESULT ==========")
         print("LINE video status:", response.status_code)

@@ -8,6 +8,10 @@ launcher.py
 
 from pathlib import Path
 import subprocess
+import sys
+
+# theft_checker.py の絶対パス（カレントディレクトリに依存せず起動できるように）
+THEFT_CHECKER_PATH = Path(__file__).parent / "theft_checker.py"
 
 
 def launch(session_dir: Path):
@@ -31,8 +35,8 @@ def launch(session_dir: Path):
 
     subprocess.run(
         [
-            "python",
-            "theft_checker.py",
+            sys.executable,  # 実行中のPythonと同じインタプリタを使う
+            str(THEFT_CHECKER_PATH),
             str(session_dir),
         ],
         check=True,

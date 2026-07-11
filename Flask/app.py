@@ -40,7 +40,9 @@ from line_notify import send_line_message, send_line_video_message
 app = Flask(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent
-SESSIONS_DIR = Path(os.getenv("SESSIONS_DIR", str(BASE_DIR / "sessions")))
+# デフォルトは controller.py の保存先（<リポジトリルート>/sessions）と同じ場所を監視する。
+# 別の場所を見る場合は環境変数 SESSIONS_DIR で上書きする。
+SESSIONS_DIR = Path(os.getenv("SESSIONS_DIR", str(BASE_DIR.parent / "sessions")))
 SESSIONS_DIR.mkdir(exist_ok=True)
 
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")

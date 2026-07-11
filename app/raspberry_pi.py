@@ -107,9 +107,11 @@ def get_weights():
     if vege_weight < 0.5:  # わずかなノイズ対策
         vege_weight = 0.0
 
+    # 負の値はノイズとして0に丸める。
+    # weight.csv に負の値が入ると theft_checker が判定不能(ERROR)になるため必須
     return {
-        "vegetable": round(vege_weight, 1),
-        "coinbox": round(coin_weight, 1),
+        "vegetable": round(max(vege_weight, 0.0), 1),
+        "coinbox": round(max(coin_weight, 0.0), 1),
     }
 
 

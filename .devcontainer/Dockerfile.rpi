@@ -16,8 +16,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# ラズパイ専用ライブラリ（GPIO・SPI）
-RUN pip install --no-cache-dir RPi.GPIO spidev
+# ラズパイ専用ライブラリ（GPIO・SPI・重量センサーHX711）
+RUN pip install --no-cache-dir RPi.GPIO spidev hx711
 
 # 推論のみ（学習はPC側で行う）
 # ultralytics はラズパイには重すぎるため tflite-runtime を使用

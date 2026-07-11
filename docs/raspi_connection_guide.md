@@ -73,19 +73,31 @@ Starting minimal web server on port 8080...
 
 ### 1-7. サーバーのIPアドレスを確認
 
+⚠️ **必ずUbuntu本体のターミナルで実行すること。**
+プロンプトが `root@033905ed6aa6:/workspace#` のような英数字の羅列になっている場合は
+**DevContainerの中**にいる。その状態で調べると `172.17.0.2` のような
+**コンテナ内部のIP**が出てしまい、ラズパイからは接続できない。
+プロンプトが `rin@rin-office:~$` のようにUbuntuのユーザー名になっている
+ターミナル（VSCodeの外で開いた端末）で実行する。
+
 ```bash
-ip addr show | grep "inet "
+hostname -I
 ```
 
 出力例:
 
 ```
-inet 127.0.0.1/8 scope host lo
-inet 192.168.1.10/24 brd 192.168.1.255 scope global dynamic wlp3s0
+192.168.1.10 172.17.0.1
 ```
 
-`127.0.0.1` **ではない方**（この例では `192.168.1.10`）がサーバーのIP。
+**最初に表示されるIP**（この例では `192.168.1.10`）がサーバーのIP。
 **このIPを紙かスマホにメモする。以降 `<サーバーIP>` と表記する。**
+
+| 出てきたIP | 意味 |
+|-----------|------|
+| `192.168.x.x` / `10.x.x.x` | 家庭・学内LANのIP → **これを使う** |
+| `172.17.x.x` | Dockerの内部IP → 使えない（コンテナ内で実行している） |
+| `127.0.0.1` | 自分自身 → 使えない |
 
 ### 1-8. 自分自身への疎通確認
 
@@ -224,11 +236,11 @@ curl http://<サーバーIP>:8080/status
 
 **失敗パターンと対処**:
 
-| エラー | 原因 | 対処 |
-|--------|------|------|
-| `Connection refused` | サーバー未起動 or ポート違い | Ubuntu側で `tmux attach -t server` で起動確認 |
+| エラー                            | 原因                               | 対処                                                    |
+| --------------------------------- | ---------------------------------- | ------------------------------------------------------- |
+| `Connection refused`              | サーバー未起動 or ポート違い       | Ubuntu側で `tmux attach -t server` で起動確認           |
 | `No route to host` / タイムアウト | 別ネットワーク or ファイアウォール | 両方が同じWi-Fiか確認。Ubuntu側で `sudo ufw allow 8080` |
-| `Could not resolve host` | IPの打ち間違い | 1-7のIPを再確認 |
+| `Could not resolve host`          | IPの打ち間違い                     | 1-7のIPを再確認                                         |
 
 ### 3-3. 静止画1枚で推論経路をテスト
 
@@ -355,13 +367,13 @@ cd app && python controller.py
 
 ## 付録B: よく使うコマンド早見表
 
-| やりたいこと | コマンド |
-|-------------|---------|
-| サーバー画面に戻る（Ubuntu） | `tmux attach -t server` |
-| tmuxから抜ける（動かしたまま） | `Ctrl+b` → `d` |
-| サーバー疎通確認（ラズパイ） | `curl http://<サーバーIP>:8080/status` |
-| 静止画テスト（ラズパイ） | `python3 app/simulate_raspi.py --image <画像> --server http://<サーバーIP>:8080` |
-| カメラテスト（ラズパイ） | `python3 app/simulate_raspi.py --camera 0 --server http://<サーバーIP>:8080` |
-| 制御なしのキーボードモード | `cd app && python3 controller.py --dummy` |
-| 重量センサー単体確認 | `cd app && python3 raspberry_pi.py` |
-| カメラデバイス一覧 | `v4l2-ctl --list-devices` |
+| やりたいこと                   | コマンド                                                                         |
+| ------------------------------ | -------------------------------------------------------------------------------- |
+| サーバー画面に戻る（Ubuntu）   | `tmux attach -t server`                                                          |
+| tmuxから抜ける（動かしたまま） | `Ctrl+b` → `d`                                                                   |
+| サーバー疎通確認（ラズパイ）   | `curl http://<サーバーIP>:8080/status`                                           |
+| 静止画テスト（ラズパイ）       | `python3 app/simulate_raspi.py --image <画像> --server http://<サーバーIP>:8080` |
+| カメラテスト（ラズパイ）       | `python3 app/simulate_raspi.py --camera 0 --server http://<サーバーIP>:8080`     |
+| 制御なしのキーボードモード     | `cd app && python3 controller.py --dummy`                                        |
+| 重量センサー単体確認           | `cd app && python3 raspberry_pi.py`                                              |
+| カメラデバイス一覧             | `v4l2-ctl --list-devices`                                                        |

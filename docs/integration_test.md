@@ -89,17 +89,18 @@ cd Flask
 SESSIONS_DIR=/path/to/リポジトリルート/sessions python app.py
 ```
 
-### 問題3: ダミー3関数の差し替えコードが未実装（カメラ取得含む）
+### 問題3: ~~ダミー3関数の差し替えコードが未実装~~ → ✅ 実装済み
 
-controller.py にはカメラからフレームを取得するコード自体が存在しない
-（`detect_coin()` 等はキーボード入力のダミーのまま）。差し替えには:
+controller.py の `detect_person / detect_coin / detect_vegetables` はAI実装に
+差し替え済み（カメラ取得 → `/predict` → 形式変換まで実装、モックでの動作確認済み）。
 
-1. `CameraCapture`（または `cv2.VideoCapture`）でコイン/野菜/監視カメラを開く
-2. フレームを `web_client.send_image_for_prediction()` でGPUサーバーに送る
-3. 返ってきたJSONを各関数の戻り値形式に変換する
-
-の3点セットが必要（実装例は段階3参照）。また **GPUサーバーのURLを config.py に
-追加する必要がある**（現状サーバーURLの設定項目が存在しない）。
+- サーバーURLは `app/config.py` の `PREDICT_SERVER_URL` で設定する
+  （**当日はGPUサーバーの実IPに書き換えること**）
+- 信頼度しきい値も config.py で調整可能（PERSON/COIN/VEGETABLE_CONF_THRESHOLD）
+- コインは「前回より増えた枚数」だけを新規投入として記録する
+  （置きっぱなしの硬貨を毎周期重複カウントしない）
+- `python controller.py --dummy` でキーボード入力の旧ダミーモードに切り替え可能
+  （サーバー・カメラなしで制御フローだけ試す用）
 
 ### 問題4（軽微）: 録画ファイルが空になる
 
@@ -154,29 +155,20 @@ cd app && python controller.py   # キーボードで人あり→コイン投入
 - [ ] weight.csv の before/after に**実センサーの値**が記録されている
 - [ ] `theft_checker.py` が起動し、session.json に判定結果が追記される
 
-### 段階3: AI実装への差し替え（結合の本丸）
+### 段階3: AIモードでの制御フロー（結合の本丸）
 
-`controller.py` のダミー3関数を、`/predict` を呼ぶ実装に差し替える。
-差し替えは `web_client.send_image_for_prediction()` を利用する：
+ダミー3関数のAI差し替えは**実装済み**。当日やることは設定と起動のみ：
 
-```python
-# 差し替えイメージ（controller.py 側）
-import cv2
-import web_client
+```bash
+# 1. GPUサーバーのIPを設定（app/config.py）
+#    PREDICT_SERVER_URL = "http://<GPUサーバーのIP>:8080"
 
-def detect_coin():
-    frame = coin_camera.read_frame()
-    _, encoded = cv2.imencode(".jpg", frame)
-    result = web_client.send_image_for_prediction(encoded.tobytes(), SERVER_URL)
-    if result is None:
-        return []
-    # "100yen" → 100 に変換（"person"等は無視）
-    values = []
-    for det in result["detections"]:
-        name = det["class_name"]
-        if name.endswith("yen") and not name.startswith(("1000", "5000", "10000")):
-            values.append(int(name.removesuffix("yen")))
-    return values
+# 2. GPUサーバー側で推論サーバーを起動（tmux内）
+tmux new -s server
+python app/web_server.py
+
+# 3. ラズパイ側でAIモード起動（※必ず app/ から）
+cd app && python controller.py
 ```
 
 **成功条件**:

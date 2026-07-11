@@ -107,6 +107,45 @@ monitor.mp4 に実際の監視映像が記録される（AIモード時のみ。
 一気に全部つなぐと問題の切り分けができないため、**4段階に分けて実施**する。
 各段階の成功条件を満たしてから次に進む。
 
+### 段階0: サーバーIPの確認とポート公開（担当: AI）
+
+#### サーバーIPの確認
+
+⚠️ **必ずUbuntu本体のターミナルで実行する。**
+プロンプトが `root@033905ed6aa6:/workspace#` のような英数字の羅列の場合は
+**DevContainerの中**にいる。そこで調べると `172.17.0.2` のような
+コンテナ内部IPが出てしまい、ラズパイからは接続できない。
+`rin@rin-office:~$` のようにUbuntuのユーザー名が出るターミナルで実行する。
+
+```bash
+hostname -I
+```
+
+| 出てきたIP | 意味 |
+|-----------|------|
+| `192.168.x.x` / `10.x.x.x` | LANのIP → **これを使う** |
+| `172.17.x.x` | Docker内部IP → 使えない（コンテナ内で実行している） |
+| `100.x.x.x` | TailscaleのIP → ラズパイもTailscale接続なら使用可 |
+| `127.0.0.1` | 自分自身 → 使えない |
+
+#### DevContainer内でサーバーを動かす場合のポート公開
+
+`devcontainer.json` の `runArgs` に `"-p", "8080:8080"` が必要（設定済み）。
+ただし**この設定より前に作られたコンテナには効かない**ので、一度もリビルドして
+いない場合は VSCode で `Ctrl+Shift+P` → `Dev Containers: Rebuild Container` を実行する。
+`forwardPorts` はVSCode経由の転送のみで、ラズパイ等のLAN上の機器からは届かない。
+
+リビルドできない場合の暫定策（ホスト側で実行、コンテナへ中継）:
+
+```bash
+sudo apt install -y socat
+socat TCP-LISTEN:8080,fork,reuseaddr TCP:172.17.0.2:8080 &
+```
+
+**成功条件**:
+- [ ] **ホスト側ターミナル**で `curl http://localhost:8080/status` が返る
+  （サーバー起動後に確認。これが通れば外部公開できている）
+
 ### 段階1: AI推論サーバー単体（担当: AI）
 
 ```bash
@@ -118,6 +157,9 @@ python app/web_server.py
 curl http://localhost:8080/status
 python app/simulate_raspi.py --image unattended_sales_place_images/selfsellingstation.jpg
 ```
+
+※ コンテナ内に `curl` が無い場合の代用:
+`python -c "import urllib.request; print(urllib.request.urlopen('http://localhost:8080/status').read())"`
 
 **成功条件**:
 - [ ] `/status` が200で応答する
@@ -213,7 +255,8 @@ cd Flask && python app.py
 | `/status` すら繋がらない | 別ネットワーク・ファイアウォール | 同じWi-Fi/LANか確認。`sudo ufw allow 8080` で開放 |
 | `Connection refused` | サーバー未起動・ポート違い | サーバーのターミナルで起動ログを確認 |
 | 初回リクエストだけタイムアウト | モデルロード直後で遅い | 2回目以降で判断。テスト開始前にウォームアップ1回 |
-| DevContainer内のサーバーに外から繋がらない | ポートフォワーディング未設定 | ホスト側で直接 `python app/web_server.py` を実行するのが確実 |
+| DevContainer内のサーバーに外から繋がらない | コンテナのポートがホスト未公開（`forwardPorts` はVSCode経由専用） | `-p 8080:8080` 設定後に**コンテナをリビルド**（段階0参照）。暫定策はsocat中継 |
+| 設定したIPが `172.17.x.x` になっている | コンテナ内でIPを調べた | **Ubuntu本体のターミナル**で `hostname -I` を実行し `192.168.x.x` 系を使う |
 | FlaskとAIサーバーのポート衝突 | 両方8080を使おうとした | AIサーバー=8080、Flask=5000（デフォルト）を確認。変更時は担当間で共有 |
 
 ### AI・推論系

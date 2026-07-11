@@ -96,15 +96,11 @@ def _read_frame(camera_index: int):
     return frame if ret else None
 
 
-def _predict(camera_index: int, conf_threshold: float) -> list[dict]:
+def _predict_frame(frame, conf_threshold: float) -> list[dict]:
     """
-    カメラ画像をGPUサーバーに送り、信頼度がしきい値以上の検出だけを返す。
-    カメラ・通信の失敗時は空リスト。
+    フレームをGPUサーバーに送り、信頼度がしきい値以上の検出だけを返す。
+    通信の失敗時は空リスト。
     """
-    frame = _read_frame(camera_index)
-    if frame is None:
-        return []
-
     _, encoded = cv2.imencode(".jpg", frame)
     result = web_client.send_image_for_prediction(
         encoded.tobytes(), PREDICT_SERVER_URL
@@ -118,9 +114,26 @@ def _predict(camera_index: int, conf_threshold: float) -> list[dict]:
     ]
 
 
-def detect_person():
+def _predict(camera_index: int, conf_threshold: float) -> list[dict]:
+    """
+    カメラ画像をGPUサーバーに送り、信頼度がしきい値以上の検出だけを返す。
+    カメラ・通信の失敗時は空リスト。
+    """
+    frame = _read_frame(camera_index)
+    if frame is None:
+        return []
+    return _predict_frame(frame, conf_threshold)
+
+
+def detect_person(frame=None):
     """
     人検知（監視カメラ + person YOLO）
+
+    Parameters
+    ----------
+    frame : numpy配列 or None
+        判定に使うフレーム。None の場合は監視カメラから新規取得する。
+        （録画用に取得済みのフレームを使い回すことでカメラ読み出しを1回にする）
 
     Returns
     -------
@@ -132,7 +145,12 @@ def detect_person():
         answer = input("人はいますか？ (y/n): ")
         return answer.lower() == "y"
 
-    detections = _predict(MONITOR_CAMERA_INDEX, PERSON_CONF_THRESHOLD)
+    if frame is None:
+        frame = _read_frame(MONITOR_CAMERA_INDEX)
+        if frame is None:
+            return False
+
+    detections = _predict_frame(frame, PERSON_CONF_THRESHOLD)
     return any(det["class_name"] == "person" for det in detections)
 
 
@@ -312,13 +330,17 @@ class Controller:
 
             while True:
 
-                #
-                # 本来はここで CameraCapture から
-                # フレームを取得して Recorder.write(frame)
-                # を呼び出す想定
-                #
-                # （現在はCamera担当実装待ち）
-                #
+                # -------------------------
+                # 監視カメラのフレーム取得・録画
+                # （同じフレームを人検知にも使い回す）
+                # -------------------------
+
+                monitor_frame = None
+
+                if not USE_DUMMY_AI:
+                    monitor_frame = _read_frame(MONITOR_CAMERA_INDEX)
+                    if monitor_frame is not None:
+                        self.recorder.write(monitor_frame)
 
                 # -------------------------
                 # コイン認識
@@ -333,7 +355,7 @@ class Controller:
                 # 人検知
                 # -------------------------
 
-                if detect_person():
+                if detect_person(monitor_frame):
 
                     disappeared_time = None
 

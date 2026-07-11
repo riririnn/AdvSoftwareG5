@@ -21,14 +21,15 @@ SESSION_DIR = PROJECT_ROOT / "sessions"
 # カメラ設定
 # ==========================================
 
+# カメラ2台構成: 監視=0 / コイン・野菜=1（共用）
 # 監視カメラ
 MONITOR_CAMERA_INDEX = 0
 
 # コインカメラ
 COIN_CAMERA_INDEX = 1
 
-# 野菜カメラ
-VEGETABLE_CAMERA_INDEX = 2
+# 野菜カメラ（コインカメラと共用）
+VEGETABLE_CAMERA_INDEX = 1
 
 # 共通設定
 CAMERA_WIDTH = 640

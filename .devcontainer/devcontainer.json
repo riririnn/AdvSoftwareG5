@@ -9,11 +9,14 @@
   "workspaceFolder": "/workspace",
 
   // シェルスクリプトの docker run オプションに相当する設定
+  // -p 8080:8080: 推論サーバーをホストの外部（ラズパイ等）からも接続可能にする
+  //   （forwardPorts はVSCode経由の転送のみで、LAN上の他機器からは届かないため）
   "runArgs": [
     "--gpus", "all",
     "--cap-add=SYS_PTRACE",
     "--security-opt", "seccomp=unconfined",
-    "--ipc=host"
+    "--ipc=host",
+    "-p", "8080:8080"
   ],
 
   "mounts": [

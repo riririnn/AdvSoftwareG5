@@ -42,6 +42,12 @@ ls -la ai/runs/vegetables_v1/weights/best.pt
 
 ### 1-4. tmuxセッションを作ってサーバーを起動
 
+⚠️ **DevContainer内でサーバーを動かす場合**は、`devcontainer.json` に
+`"-p", "8080:8080"` が入った状態でコンテナをビルドしていることが前提
+（設定済み。ただし**設定追加前に作られたコンテナはリビルドが必要**：
+VSCodeで `Ctrl+Shift+P` → `Dev Containers: Rebuild Container`）。
+これがないとコンテナ内のサーバーにラズパイから接続できない。
+
 SSH切断や誤操作でサーバーが落ちないよう、必ずtmux内で起動する。
 
 ```bash

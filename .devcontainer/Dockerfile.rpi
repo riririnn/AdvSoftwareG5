@@ -22,6 +22,8 @@ RUN pip install --no-cache-dir RPi.GPIO spidev hx711
 # 推論のみ（学習はPC側で行う）
 # ultralytics はラズパイには重すぎるため tflite-runtime を使用
 RUN pip install --no-cache-dir \
+    flask \
+    requests \
     opencv-python-headless \
     pyyaml \
     tflite-runtime

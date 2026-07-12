@@ -38,6 +38,8 @@ RUN pip3 install --no-cache-dir \
 
 # Pythonパッケージ（開発・学習・推論に必要なものをすべてここに集約）
 RUN pip3 install --no-cache-dir \
+    flask \
+    requests \
     opencv-python-headless \
     pyyaml \
     ultralytics \

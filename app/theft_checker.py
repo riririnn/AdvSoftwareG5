@@ -116,23 +116,67 @@ class ConfigValidationError(Exception):
 
 def _validate_target_vegetable():
     """
-    TARGET_VEGETABLE が VEGETABLE_PRICES に登録されているかを
-    確認する。
+    TARGET_VEGETABLE が価格設定・単重量設定に対応しているかを確認する。
 
-    Raises
-    ------
-    ConfigValidationError
-        TARGET_VEGETABLE が VEGETABLE_PRICES のキーに
-        存在しない場合
+    Web管理画面と結合した後は、VEGETABLE_PRICES / VEGETABLE_WEIGHTS が
+    辞書型で書き出される。
+    旧実装では VEGETABLE_WEIGHTS が数値である場合もあるため、
+    数値・辞書型の両方に対応する。
     """
 
-    if TARGET_VEGETABLE not in VEGETABLE_PRICES:
+    if not TARGET_VEGETABLE:
         raise ConfigValidationError(
-            f"config.py の TARGET_VEGETABLE "
-            f"({TARGET_VEGETABLE!r}) が VEGETABLE_PRICES "
-            f"({list(VEGETABLE_PRICES.keys())}) に登録されていません。"
-            f"綴りミスがないか確認してください。"
+            "config.py の TARGET_VEGETABLE が空です。"
+            "Web管理画面で重量センサーの設置商品を設定してください。"
         )
+
+    if isinstance(VEGETABLE_PRICES, dict):
+        if TARGET_VEGETABLE not in VEGETABLE_PRICES:
+            raise ConfigValidationError(
+                f"config.py の TARGET_VEGETABLE "
+                f"({TARGET_VEGETABLE!r}) が VEGETABLE_PRICES "
+                f"({list(VEGETABLE_PRICES.keys())}) に登録されていません。"
+                f"綴りミスがないか確認してください。"
+            )
+    else:
+        try:
+            int(VEGETABLE_PRICES)
+        except (TypeError, ValueError):
+            raise ConfigValidationError(
+                f"VEGETABLE_PRICES が数値でも辞書でもありません: {VEGETABLE_PRICES!r}"
+            )
+
+    if isinstance(VEGETABLE_WEIGHTS, dict):
+        if TARGET_VEGETABLE not in VEGETABLE_WEIGHTS:
+            raise ConfigValidationError(
+                f"config.py の TARGET_VEGETABLE "
+                f"({TARGET_VEGETABLE!r}) が VEGETABLE_WEIGHTS "
+                f"({list(VEGETABLE_WEIGHTS.keys())}) に登録されていません。"
+                f"Web管理画面の商品登録・重量センサー設定を確認してください。"
+            )
+    else:
+        try:
+            float(VEGETABLE_WEIGHTS)
+        except (TypeError, ValueError):
+            raise ConfigValidationError(
+                f"VEGETABLE_WEIGHTS が数値でも辞書でもありません: {VEGETABLE_WEIGHTS!r}"
+            )
+
+
+def _get_target_price():
+    """現在の設置商品の単価を返す。"""
+    if isinstance(VEGETABLE_PRICES, dict):
+        return int(VEGETABLE_PRICES[TARGET_VEGETABLE])
+
+    return int(VEGETABLE_PRICES)
+
+
+def _get_target_unit_weight():
+    """現在の設置商品の単重量を返す。"""
+    if isinstance(VEGETABLE_WEIGHTS, dict):
+        return float(VEGETABLE_WEIGHTS[TARGET_VEGETABLE])
+
+    return float(VEGETABLE_WEIGHTS)
 
 
 # ==========================================
@@ -419,7 +463,12 @@ def _calc_purchase_amount_by_weight(weights: dict):
         # 重量が増えている＝矛盾データ。無視（0g減）
         decreased_weight = 0
 
-    unit_weight = VEGETABLE_WEIGHTS
+    unit_weight = _get_target_unit_weight()
+
+    if unit_weight <= 0:
+        raise ConfigValidationError(
+            f"{TARGET_VEGETABLE!r} の単重量が0以下です: {unit_weight}"
+        )
 
     raw_estimated_count = decreased_weight / unit_weight
 
@@ -433,7 +482,7 @@ def _calc_purchase_amount_by_weight(weights: dict):
         decreased_weight - (estimated_count * unit_weight)
     )
 
-    price = VEGETABLE_PRICES[TARGET_VEGETABLE]
+    price = _get_target_price()
 
     purchase_amount = estimated_count * price
 

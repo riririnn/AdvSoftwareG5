@@ -33,12 +33,14 @@ if [ -e /dev/spidev0.1 ]; then
     DEVICE_OPTS="${DEVICE_OPTS} --device /dev/spidev0.1"
 fi
 
-# カメラデバイス（画像認識用）のチェック
-if [ -e /dev/video0 ]; then
-    DEVICE_OPTS="${DEVICE_OPTS} --device /dev/video0"
-else
-    echo "Warning: /dev/video0 (Camera) not found. Image recognition will fail."
-fi
+# カメラデバイスのチェック（監視=video0 / コイン=video1 / 野菜=video2 の3台構成）
+for CAM in /dev/video0 /dev/video1 /dev/video2; do
+    if [ -e "$CAM" ]; then
+        DEVICE_OPTS="${DEVICE_OPTS} --device $CAM"
+    else
+        echo "Warning: $CAM not found. (3台未満の場合は app/config.py のカメラindexを調整してください)"
+    fi
+done
 
 # 3. Docker コンテナの起動
 # --restart always: ラズパイの再起動時やプログラムが落ちた時に自動で再起動

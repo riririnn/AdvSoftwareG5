@@ -1,15 +1,18 @@
 """
-YOLO学習スクリプト（タスク2）
-ultralytics YOLOv8 を使用。
+YOLO学習スクリプト
+ultralytics YOLOv8 を使用。データセットは Roboflow からダウンロードした
+ai/dataset/data.yaml（クラス定義込み）を使う。
 
-【Roboflowデータセットを使う場合（推奨）】
-    python ai/train.py --data ai/dataset/data.yaml
+【学習】
+    python ai/train.py
 
-【自前データを使う場合】
-    python ai/train.py  # デフォルト: ai/configs/vegetables.yaml
+【中断したチェックポイント(last.pt)から再開】
+    python ai/train.py --resume
 
 【検証のみ】
-    python ai/train.py --mode val --data ai/dataset/data.yaml
+    python ai/train.py --mode val
+
+※ 学習は必ず tmux 内で実行すること（SSH切断で学習が止まるのを防ぐ）
 """
 import argparse
 from pathlib import Path
@@ -19,11 +22,11 @@ import yaml
 from ultralytics import YOLO
 
 # ---- デフォルト設定 ----
-DEFAULT_CONFIG_YAML = Path(__file__).parent / "configs" / "vegetables.yaml"
+DEFAULT_DATA_YAML = Path(__file__).parent / "dataset" / "data.yaml"
 BASE_MODEL  = "yolov8m.pt"  # medium: 精度重視。RTX5060Ti なら十分動く
 EPOCHS      = 100
 IMG_SIZE    = 640
-BATCH_SIZE  = 16            # ラズパイCPU運用なら 4〜8 を推奨
+BATCH_SIZE  = 16
 PATIENCE    = 20            # early stopping: 改善なしで止まるエポック数
 PROJECT_DIR = Path(__file__).parent / "runs"
 RUN_NAME    = "vegetables_v1"
@@ -45,82 +48,50 @@ AUGMENT_PARAMS = {
 }
 
 
-def check_class_alignment(data_yaml: Path) -> None:
-    """
-    ⚠️ クラスID整合チェック
-    Roboflowデータ付属の data.yaml と自前の vegetables.yaml で
-    クラス順が異なる場合は警告を出す。学習前に必ず確認する。
-    """
-    own_yaml = DEFAULT_CONFIG_YAML
-    if not own_yaml.exists() or data_yaml == own_yaml:
-        return
+def train(data_yaml: Path = DEFAULT_DATA_YAML, resume: bool = False):
+    weights_dir = PROJECT_DIR / RUN_NAME / "weights"
 
-    with open(data_yaml, encoding="utf-8") as f:
-        ext = yaml.safe_load(f)
-    with open(own_yaml, encoding="utf-8") as f:
-        own = yaml.safe_load(f)
-
-    ext_names = ext.get("names", {})
-    own_names = own.get("names", {})
-
-    # dict形式 {0: "tomato", ...} またはリスト形式 ["tomato", ...] に対応
-    if isinstance(ext_names, list):
-        ext_names = {i: v for i, v in enumerate(ext_names)}
-    if isinstance(own_names, list):
-        own_names = {i: v for i, v in enumerate(own_names)}
-
-    mismatches = [
-        f"  id={k}: データ={ext_names.get(k)!r} ≠ 自前={own_names.get(k)!r}"
-        for k in set(ext_names) | set(own_names)
-        if ext_names.get(k) != own_names.get(k)
-    ]
-    if mismatches:
-        print("⚠️  [クラスID不一致] データ付属の data.yaml をそのまま使います（vegetables.yaml は学習に使いません）")
-        for m in mismatches:
-            print(m)
+    if resume:
+        last_weights = weights_dir / "last.pt"
+        if not last_weights.exists():
+            raise FileNotFoundError(f"再開用チェックポイントが見つかりません: {last_weights}")
+        print(f"\n[Train] チェックポイントから再開します: {last_weights}\n")
+        model = YOLO(str(last_weights))
+        results = model.train(resume=True)
     else:
-        print("✅ [クラスID整合] 問題なし")
+        if not data_yaml.exists():
+            raise FileNotFoundError(
+                f"データセット設定ファイルが見つかりません: {data_yaml}\n"
+                "先に ai/download_dataset.py でデータセットをダウンロードしてください。"
+            )
 
+        with open(data_yaml, encoding="utf-8") as f:
+            cfg = yaml.safe_load(f)
+        print(f"\n[Train] データセット: {data_yaml}")
+        print(f"[Train] クラス数: {cfg.get('nc', '?')}")
+        print(f"[Train] モデル: {BASE_MODEL}  エポック: {EPOCHS}  バッチ: {BATCH_SIZE}\n")
 
-def train(data_yaml: Path = DEFAULT_CONFIG_YAML):
-    if not data_yaml.exists():
-        raise FileNotFoundError(
-            f"データセット設定ファイルが見つかりません: {data_yaml}\n"
-            "Roboflow からダウンロードした data.yaml を --data で指定するか、\n"
-            "ai/dataset/ に画像とラベルを配置してください。"
+        model = YOLO(BASE_MODEL)
+        results = model.train(
+            data=str(data_yaml),
+            epochs=EPOCHS,
+            imgsz=IMG_SIZE,
+            batch=BATCH_SIZE,
+            patience=PATIENCE,
+            project=str(PROJECT_DIR),
+            name=RUN_NAME,
+            exist_ok=True,
+            device="0" if torch.cuda.is_available() else "cpu",
+            amp=False,  # AMPチェックがRTX 5060 Ti環境でハングするため無効化
+            workers=2,
+            **AUGMENT_PARAMS,
         )
 
-    check_class_alignment(data_yaml)
-
-    with open(data_yaml, encoding="utf-8") as f:
-        cfg = yaml.safe_load(f)
-    nc = cfg.get("nc", "?")
-    names = cfg.get("names", [])
-    print(f"\n[Train] データセット: {data_yaml}")
-    print(f"[Train] クラス数: {nc}  クラス: {names}")
-    print(f"[Train] モデル: {BASE_MODEL}  エポック: {EPOCHS}  バッチ: {BATCH_SIZE}\n")
-
-    model = YOLO(BASE_MODEL)
-    results = model.train(
-        data=str(data_yaml),
-        epochs=EPOCHS,
-        imgsz=IMG_SIZE,
-        batch=BATCH_SIZE,
-        patience=PATIENCE,
-        project=str(PROJECT_DIR),
-        name=RUN_NAME,
-        exist_ok=True,
-        device="0" if torch.cuda.is_available() else "cpu",
-        workers=2,
-        **AUGMENT_PARAMS,
-    )
-
-    best_weights = PROJECT_DIR / RUN_NAME / "weights" / "best.pt"
-    print(f"\n✅ 学習完了。最良モデル: {best_weights}")
+    print(f"\n✅ 学習完了。最良モデル: {weights_dir / 'best.pt'}")
     return results
 
 
-def validate(data_yaml: Path = DEFAULT_CONFIG_YAML):
+def validate(data_yaml: Path = DEFAULT_DATA_YAML):
     """学習済みモデルを検証データで評価する。"""
     best_weights = PROJECT_DIR / RUN_NAME / "weights" / "best.pt"
     if not best_weights.exists():
@@ -138,18 +109,23 @@ if __name__ == "__main__":
     parser.add_argument(
         "--data",
         type=Path,
-        default=DEFAULT_CONFIG_YAML,
-        help="データセットyamlのパス（Roboflow付属のdata.yamlを推奨）",
+        default=DEFAULT_DATA_YAML,
+        help="データセットyamlのパス（デフォルト: ai/dataset/data.yaml）",
     )
     parser.add_argument(
         "--mode",
         choices=["train", "val"],
         default="train",
     )
+    parser.add_argument(
+        "--resume",
+        action="store_true",
+        help="直前のチェックポイント(last.pt)から学習を再開する",
+    )
     args = parser.parse_args()
 
     if args.mode == "train":
-        train(args.data)
+        train(args.data, resume=args.resume)
         validate(args.data)
     else:
         validate(args.data)

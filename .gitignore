@@ -17,8 +17,16 @@ __pycache__/
 *.onnx
 
 # 学習出力（ログ・チェックポイント）
-ai/runs/
-runs/
+ai/runs/*
+/runs/
+
+# 学習済みモデル(best.pt)のみバックアップとして管理する（約50MB）
+# 再学習のたびにコミットすると履歴が肥大化するため、学習が一区切りついたときだけ更新する
+!ai/runs/vegetables_v1/
+ai/runs/vegetables_v1/*
+!ai/runs/vegetables_v1/weights/
+ai/runs/vegetables_v1/weights/*
+!ai/runs/vegetables_v1/weights/best.pt
 
 # 作業メモ
 .devcontainer/todo.md

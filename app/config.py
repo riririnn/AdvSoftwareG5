@@ -21,19 +21,33 @@ SESSION_DIR = PROJECT_ROOT / "sessions"
 # カメラ設定
 # ==========================================
 
+# カメラ2台構成: 監視=0 / コイン・野菜=1（共用）
 # 監視カメラ
 MONITOR_CAMERA_INDEX = 0
 
 # コインカメラ
 COIN_CAMERA_INDEX = 1
 
-# 野菜カメラ
-VEGETABLE_CAMERA_INDEX = 2
+# 野菜カメラ（コインカメラと共用）
+VEGETABLE_CAMERA_INDEX = 1
 
 # 共通設定
 CAMERA_WIDTH = 640
 CAMERA_HEIGHT = 480
 CAMERA_FPS = 10
+
+# ==========================================
+# AI推論サーバー設定
+# ==========================================
+
+# GPU推論サーバー（app/web_server.py）のURL。
+# 別マシンで動かす場合はそのIPに変更する（例: "http://192.168.1.10:8080"）
+PREDICT_SERVER_URL = "http://localhost:8080"
+
+# 検出として採用する信頼度の下限（これ未満の検出は無視）
+PERSON_CONF_THRESHOLD = 0.5
+COIN_CONF_THRESHOLD = 0.5
+VEGETABLE_CONF_THRESHOLD = 0.4
 
 # ==========================================
 # 判定設定

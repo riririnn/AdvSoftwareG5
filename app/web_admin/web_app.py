@@ -62,19 +62,12 @@ except ImportError:
 app = Flask(__name__)
 
 BASE_DIR = Path(__file__).resolve().parent
-<<<<<<< HEAD:app/web_admin/web_app.py
 # app/web_admin/web_app.py から見たプロジェクトルート
 PROJECT_ROOT = BASE_DIR.parent.parent
 # controller.py の保存先（<リポジトリルート>/sessions）と同じ場所を監視する。
 # 別の場所を見る場合は環境変数 SESSIONS_DIR で上書きする。
 SESSIONS_DIR = Path(os.getenv("SESSIONS_DIR", str(PROJECT_ROOT / "sessions")))
 SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
-=======
-# デフォルトは controller.py の保存先（<リポジトリルート>/sessions）と同じ場所を監視する。
-# 別の場所を見る場合は環境変数 SESSIONS_DIR で上書きする。
-SESSIONS_DIR = Path(os.getenv("SESSIONS_DIR", str(BASE_DIR.parent / "sessions")))
-SESSIONS_DIR.mkdir(exist_ok=True)
->>>>>>> origin/main:Flask/app.py
 
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
 LINE_VIDEO_PREVIEW_URL = os.getenv("LINE_VIDEO_PREVIEW_URL", "").strip()

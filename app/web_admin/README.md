@@ -1,38 +1,37 @@
-# Web管理画面（Flask）
+# Web管理画面
 
-このディレクトリは、無人販売支援システムのWeb管理画面です。
+無人販売支援システムのWeb管理画面です。
 
-## 役割
+## 配置
 
-- 商品登録
-- 在庫表示・在庫変更
-- 重量センサー設定
-- session.json 取込
-- 売上履歴・通知履歴表示
-- LINE購入通知・万引き通知
-- 万引き時の動画通知
+```text
+app/web_admin/
+├─ web_app.py
+├─ data_store.py
+├─ line_notify.py
+├─ templates/
+└─ static/
+```
+
+古い `Flask/` フォルダは使用しません。
 
 ## 起動方法
 
-リポジトリ直下で実行してください。
+リポジトリ直下で実行します。
 
 ```bash
+pip install -r requirements.txt
 python -m app.web_admin.web_app
 ```
 
-または、直接実行する場合は以下です。
+## 実行時データ
 
-```bash
-python app/web_admin/web_app.py
+以下はGit管理せず、実行時に生成します。
+
+```text
+runtime/data_store.json
+runtime/processed_sessions.json
+sessions/
 ```
 
-## 保存先
-
-- セッション: `sessions/`
-- Webデータ: `runtime/data_store.json`
-- 処理済みsession記録: `runtime/processed_sessions.json`
-- Webが更新する設定: `app/config.py`
-
-## 注意
-
-`runtime/` と `sessions/` は実行時データなので、Gitには入れません。
+Web管理画面で登録した商品情報・重量センサー設定は、制御側と共通の `app/config.py` に反映されます。

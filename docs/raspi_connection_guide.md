@@ -1,385 +1,287 @@
-# ラズパイ接続・カメラ認識 完全手順書
+# ラズパイ接続・カメラ認識 完全手順書（実機検証済み）
 
-推論サーバー（Ubuntu + GPU）とRaspberry Piを接続し、カメラ認識を動かすまでの
-全手順を省略なしで記述する。上から順に実行すれば動く状態になることを目指す。
+推論サーバー（Ubuntu + GPU）とRaspberry Piを Tailscale で接続し、カメラ認識を
+動かすまでの全手順。2026-07-14 の結合テストで実際にたどった手順・つまずき所を反映。
 
-## 前提条件
+## この構成の実機情報
 
-- Ubuntu側: 推論サーバーを立てるマシン（GPU搭載、リポジトリclone済み、学習済みモデルあり）
-- ラズパイ側: Raspberry Pi（OS起動済み、ネットワーク接続済み、SSHまたは直接操作可能）
-- 両方が**同じネットワーク**（同じWi-Fiルーター/LAN）に接続されていること
-- USBカメラ2台（監視用・コイン野菜用）
+| 役割 | マシン | Tailscale IP | 備考 |
+|------|--------|-------------|------|
+| 推論サーバー | rin-office（Ubuntu, GPU） | **100.98.67.33** | DevContainer内でサーバーを起動 |
+| ラズパイ | aseg1（Raspberry Pi OS） | 100.120.189.9 | カメラ2台・重量センサー接続 |
+
+- 作業ブランチは **`integration-test`**（サーバー・ラズパイ両方）
+- サーバーとラズパイは別ネットワークでも **Tailscale経由**で接続する
+  （同一LANの `192.168.x.x` は今回は使わなかった）
 
 ---
 
-## パート1: Ubuntu側（推論サーバー）
+## パート1: サーバー側（Ubuntu / DevContainer）
 
-### 1-1. ターミナルを開き、リポジトリへ移動
-
-```bash
-cd ~/AdvSoftwereG5
-```
-
-※ パスは自分の環境のリポジトリの場所に読み替える。場所がわからない場合:
-`find ~ -maxdepth 3 -name "AdvSoftwereG5" -type d 2>/dev/null`
-
-### 1-2. 最新のコードを取得
+### 1-1. ブランチを合わせる（🖥️ コンテナ内）
 
 ```bash
+cd /workspace
+git fetch origin
+git switch integration-test
 git pull
 ```
 
-`Already up to date.` または更新ログが出ればOK。
-
-### 1-3. 学習済みモデルの存在確認
+### 1-2. 同梱モデルの確認（🖥️ コンテナ内）
 
 ```bash
-ls -la ai/runs/vegetables_v1/weights/best.pt
+ls -la ai/runs/vegetables_v1/weights/best.pt   # 野菜・硬貨モデル（約50MB）
+ls -la ai/weights/yolov8s.pt                    # 人間検出モデル（約22MB）
 ```
 
-ファイルが表示されればOK（約50MB）。
-`No such file` の場合は `git pull` で取得されるはず（Git管理済みのため）。
+⚠️ **両方リポジトリに同梱済み。** これがないとサーバー起動時に人間検出モデルを
+ネットからダウンロードしようとし、オフライン環境では
+`Temporary failure in name resolution` で**起動に失敗する**（実際に発生した）。
 
-### 1-4. tmuxセッションを作ってサーバーを起動
-
-⚠️ **DevContainer内でサーバーを動かす場合**は、`devcontainer.json` に
-`"-p", "8080:8080"` が入った状態でコンテナをビルドしていることが前提
-（設定済み。ただし**設定追加前に作られたコンテナはリビルドが必要**：
-VSCodeで `Ctrl+Shift+P` → `Dev Containers: Rebuild Container`）。
-これがないとコンテナ内のサーバーにラズパイから接続できない。
-
-SSH切断や誤操作でサーバーが落ちないよう、必ずtmux内で起動する。
+### 1-3. サーバー起動（🖥️ コンテナ内、必ずtmux内で）
 
 ```bash
 tmux new -s server
-```
-
-画面が切り替わったら（下部に緑のバーが出る）:
-
-```bash
 python app/web_server.py
 ```
 
-### 1-5. 起動完了を待つ
+`Starting minimal web server on port 8080...` が出れば成功。
+`Ctrl+b` → `d` でデタッチ（サーバーは動いたまま）。
 
-以下が表示されるまで**数十秒待つ**（モデルロードに時間がかかる）:
+### 1-4. サーバー自身で生存確認（🖥️ コンテナ内）
 
-```
-Starting minimal web server on port 8080...
-```
-
-※ 初回起動時は人間検出用モデル `yolov8s.pt` の自動ダウンロードが入り、さらに時間がかかる。
-
-### 1-6. tmuxからデタッチ（サーバーは動いたまま抜ける）
-
-キーボードで **`Ctrl+b` を押して離し、続けて `d`** を押す。
-元の画面に戻るが、サーバーは裏で動き続けている。
-
-※ サーバーの画面に戻りたいとき: `tmux attach -t server`
-
-### 1-7. サーバーのIPアドレスを確認
-
-⚠️ **必ずUbuntu本体のターミナルで実行すること。**
-プロンプトが `root@033905ed6aa6:/workspace#` のような英数字の羅列になっている場合は
-**DevContainerの中**にいる。その状態で調べると `172.17.0.2` のような
-**コンテナ内部のIP**が出てしまい、ラズパイからは接続できない。
-プロンプトが `rin@rin-office:~$` のようにUbuntuのユーザー名になっている
-ターミナル（VSCodeの外で開いた端末）で実行する。
+コンテナには `curl` が無いので Python で確認:
 
 ```bash
-hostname -I
+python -c "import urllib.request; print(urllib.request.urlopen('http://localhost:8080/status').read())"
 ```
 
-出力例:
-
-```
-192.168.1.10 172.17.0.1
-```
-
-**最初に表示されるIP**（この例では `192.168.1.10`）がサーバーのIP。
-**このIPを紙かスマホにメモする。以降 `<サーバーIP>` と表記する。**
-
-| 出てきたIP | 意味 |
-|-----------|------|
-| `192.168.x.x` / `10.x.x.x` | 家庭・学内LANのIP → **これを使う** |
-| `172.17.x.x` | Dockerの内部IP → 使えない（コンテナ内で実行している） |
-| `127.0.0.1` | 自分自身 → 使えない |
-
-### 1-8. 自分自身への疎通確認
-
-```bash
-curl http://localhost:8080/status
-```
-
-`{"sales_count": 0, "total_amount": 0, "latest_event": "None"}` が返ればサーバーは正常。
-
-### 1-9. ファイアウォールで8080を開放
-
-```bash
-sudo ufw allow 8080
-```
-
-パスワードを聞かれたら入力。`Rules updated` と出ればOK。
-（ufwが無効の場合 `Firewall not enabled` 等が出るが、その場合は何もしなくてよい）
-
-**→ Ubuntu側の準備完了。以降はラズパイ側の操作。**
+`{"sales_count": 0, ...}` が返ればサーバーは生きている。
 
 ---
 
-## パート2: ラズパイ側（初回セットアップ）
+## パート2: コンテナのポートをホストに公開する（重要）
 
-### 2-1. ラズパイにログイン
+DevContainer内のサーバーは、そのままでは**ホストの外（ラズパイ）から見えない**。
+コンテナは隔離ネットワークで、ホスト:8080 に来た通信は自動ではコンテナに入らない。
 
-直接操作するか、同じネットワークのPCからSSH:
-
-```bash
-ssh pi@<ラズパイのIP>
+```
+ラズパイ ──Tailscale──▶ ホスト:8080 ──?──▶ コンテナ:8080（サーバー）
+                                      ↑ここに通路が必要
 ```
 
-※ ユーザー名は環境に合わせる（`pi` とは限らない）
+### 方法A: socat中継（今回採用・リビルド不要）
 
-### 2-2. リポジトリを取得
-
-初回のみ:
+**🖥️ Ubuntu本体（`rin@rin-office`、コンテナの外）**で実行:
 
 ```bash
-cd ~
-git clone git@github.com:riririnn/AdvSoftwereG5.git
-cd AdvSoftwereG5
+# コンテナのIPを確認（コンテナ内で hostname -I → 例 172.17.0.2）
+sudo apt install -y socat
+socat TCP-LISTEN:8080,fork,reuseaddr TCP:172.17.0.2:8080 &
 ```
 
-2回目以降は:
+⚠️ **socatはホストで動かす。** コンテナ内で動かしても通信がホストから
+コンテナに入ってこないため無意味。`sudo` は apt install に必要なだけ。
+**このターミナルは閉じない**（閉じると中継が止まる）。
+
+確認（🖥️ Ubuntu本体）:
 
 ```bash
-cd ~/AdvSoftwereG5
+curl http://localhost:8080/status   # → {"sales_count": 0, ...} が返ればOK
+```
+
+### 方法B: `-p 8080:8080` でリビルド（恒久対応・後日用）
+
+`devcontainer.json` の `runArgs` に `"-p", "8080:8080"` は設定済み。
+`Ctrl+Shift+P` → `Dev Containers: Rebuild Container` でリビルドすれば
+socat不要になる（ただしリビルド中はセッションが切れサーバー再起動が必要）。
+`forwardPorts` はVSCode経由の転送のみでLAN/Tailscaleの他機器からは届かないため、
+`-p` が必須。
+
+---
+
+## パート3: ラズパイ側のセットアップ
+
+### 3-1. ブランチを合わせる（🍓 ラズパイ）
+
+```bash
+cd ~/advance_software_engnering/AdvSoftwareG5
+git fetch origin
+git switch integration-test
 git pull
 ```
 
-※ clone で `Permission denied (publickey)` が出る場合はHTTPSを使う:
-`git clone https://github.com/riririnn/AdvSoftwereG5.git`
+### 3-2. 必要ライブラリのインストール（🍓 ラズパイ）
 
-### 2-3. Pythonバージョン確認
-
-```bash
-python3 --version
-```
-
-**3.10以上**であること（コードが `dict | None` 記法を使うため3.9以下では動かない）。
-3.9以下の場合はDockerを使う（付録A参照）。
-
-### 2-4. 必要なライブラリをインストール
+Raspberry Pi OS は PEP668 で pip が制限されるため apt を使う:
 
 ```bash
-pip3 install opencv-python-headless RPi.GPIO hx711
+sudo apt update
+sudo apt install -y python3-opencv v4l-utils
+pip3 install hx711 --break-system-packages   # 重量センサー用（aptに無いため）
 ```
 
-※ 重量センサーを使わない動作確認だけなら `opencv-python-headless` だけでもよい
-（センサー系が無い場合は自動でダミー値になる）。
+※ `RPi.GPIO` は最初から入っていることが多い（`python3 -c "import RPi.GPIO"` で確認）。
+※ 推論はサーバーで行うので、ラズパイに ultralytics / PyTorch は**不要**。
+　OpenCVはカメラ撮影・JPEG圧縮・録画のためだけに使う。
 
-### 2-5. カメラ2台を接続して確認
-
-USBカメラを2台ともUSBポートに挿してから:
-
-```bash
-ls /dev/video*
-```
-
-期待する出力（数字が2種類以上あればよい）:
-
-```
-/dev/video0  /dev/video1
-```
-
-※ 1台のカメラが `/dev/video0` と `/dev/video1` の2つを占有する機種もある。
-その場合の見分け方:
-
-```bash
-v4l2-ctl --list-devices
-```
-
-（`v4l2-ctl` がなければ `sudo apt install v4l-utils`）
-カメラ名ごとにデバイスが表示されるので、**各カメラの1番目のデバイス番号**をメモする。
-
-### 2-6. どちらのカメラが何番かを決める
-
-- **監視カメラ（人を映す）** → index 0 に接続されたカメラ
-- **コイン・野菜カメラ（手元を映す）** → index 1 に接続されたカメラ
-
-実際の番号が 0/1 でない場合（例: 0/2）は `app/config.py` の
-`MONITOR_CAMERA_INDEX` / `COIN_CAMERA_INDEX` / `VEGETABLE_CAMERA_INDEX` を実番号に合わせる。
-
----
-
-## パート3: ラズパイ側（接続設定と疎通確認）
-
-### 3-1. サーバーIPを設定ファイルに書き込む
+### 3-3. サーバーIPを設定（🍓 ラズパイ）
 
 ```bash
 nano app/config.py
 ```
 
-以下の行を探し（`Ctrl+W` で `PREDICT` を検索すると早い）:
+`Ctrl+W` → `PREDICT` で該当行へジャンプし、サーバーのTailscale IPに変更:
 
 ```python
-PREDICT_SERVER_URL = "http://localhost:8080"
+PREDICT_SERVER_URL = "http://100.98.67.33:8080"
 ```
 
-パート1-7でメモしたIPに書き換える:
+`Ctrl+O` → `Enter` → `Ctrl+X` で保存。
 
-```python
-PREDICT_SERVER_URL = "http://192.168.1.10:8080"
-```
-
-保存して終了: **`Ctrl+O` → `Enter` → `Ctrl+X`**
-
-### 3-2. サーバーへの疎通確認
+### 3-4. 疎通確認（🍓 ラズパイ）
 
 ```bash
-curl http://<サーバーIP>:8080/status
+curl http://100.98.67.33:8080/status
 ```
 
-**成功**: `{"sales_count": 0, ...}` が返る → 3-3へ
+`{"sales_count": 0, ...}` が返れば接続成功。
 
-**失敗パターンと対処**:
+⚠️ **`localhost` を使わないこと。** ラズパイで `localhost` はラズパイ自身を指すので
+繋がらない。必ずサーバーのTailscale IP（`100.98.67.33`）を指定する。
 
-| エラー                            | 原因                               | 対処                                                    |
-| --------------------------------- | ---------------------------------- | ------------------------------------------------------- |
-| `Connection refused`              | サーバー未起動 or ポート違い       | Ubuntu側で `tmux attach -t server` で起動確認           |
-| `No route to host` / タイムアウト | 別ネットワーク or ファイアウォール | 両方が同じWi-Fiか確認。Ubuntu側で `sudo ufw allow 8080` |
-| `Could not resolve host`          | IPの打ち間違い                     | 1-7のIPを再確認                                         |
-
-### 3-3. 静止画1枚で推論経路をテスト
-
-カメラを使う前に、リポジトリ内のテスト画像で「ラズパイ→サーバー→JSON」の
-全経路が動くことを確認する:
+### 3-5. 静止画で推論経路テスト（🍓 ラズパイ）
 
 ```bash
-python3 app/simulate_raspi.py --image unattended_sales_place_images/selfsellingstation.jpg --server http://<サーバーIP>:8080
+python3 app/simulate_raspi.py --image unattended_sales_place_images/selfsellingstation.jpg --server http://100.98.67.33:8080
 ```
 
-期待する出力（検出結果が表示される）:
-
-```
-[SimRPi] 画像モード: ... → http://192.168.1.10:8080/predict
-  carrot  conf=45.57%  bbox=(52,362)-(96,387)
-  corn    conf=45.20%  bbox=(92,423)-(164,498)
-  ...
-```
-
-**これが出れば接続は完全に機能している。**
-
-### 3-4. カメラからのリアルタイム送信テスト（任意だが推奨）
-
-```bash
-python3 app/simulate_raspi.py --camera 0 --server http://<サーバーIP>:8080
-```
-
-- カメラ0の映像が毎秒サーバーに送られ、検出結果が流れる
-- **自分がカメラに映って `person` が表示されるか確認する**（人間検出の実写テスト）
-- 終了は `Ctrl+C`（プレビューウィンドウがある環境では `q`）
-
-※ SSH接続でGUIがない場合、プレビュー表示でエラーが出ることがある。
-その場合も送信自体は動くので検出ログだけ確認すればよい。
+`carrot conf=...` のような検出結果が出れば、ラズパイ→サーバー→JSONの全経路が動作。
 
 ---
 
-## パート4: ラズパイ側（本番: controller起動）
+## パート4: カメラの確認と設定
 
-### 4-1. tmuxを作って app/ ディレクトリへ移動
+### 4-1. カメラの特定（🍓 ラズパイ）
 
 ```bash
-tmux new -s controller
-cd ~/AdvSoftwereG5/app
+v4l2-ctl --list-devices
 ```
 
-### 4-2. controller起動
+⚠️ **`/dev/video*` は大量に出るが大半はカメラではない。**
+`bcm2835-codec` / `bcm2835-isp` はラズパイ内蔵の映像処理ブロック（video10〜31）。
+**USBカメラは若い番号（0〜3）**に割り当てられる。
+
+さらに **USBカメラ1台につき2つの番号を占有し、撮影できるのは偶数番（若い方）のみ。**
+実際に撮れるかは以下で確認:
 
 ```bash
+python3 -c "
+import cv2
+for i in [0, 1, 2, 3]:
+    cap = cv2.VideoCapture(i)
+    ok, _ = cap.read()
+    print(f'video{i}:', 'OK' if ok else 'NG')
+    cap.release()
+"
+```
+
+### 4-2. 今回の結合テスト機の実際の割り当て
+
+```
+UVC Camera (046d:081b)      → /dev/video0  ✅撮影OK   → 監視カメラ
+C922 Pro Stream Webcam      → /dev/video2  ✅撮影OK   → コイン・野菜カメラ
+（video1, video3 はメタデータ用でNG）
+```
+
+→ `app/config.py` は **監視=0 / コイン・野菜=2** に設定済み:
+
+```python
+MONITOR_CAMERA_INDEX = 0
+COIN_CAMERA_INDEX = 2
+VEGETABLE_CAMERA_INDEX = 2
+```
+
+カメラの接続位置が変わって番号が変わったら、この値を実機に合わせて修正する。
+
+---
+
+## パート5: 重量センサーの確認（🍓 ラズパイ）
+
+```bash
+cd app
+python3 raspberry_pi.py
+```
+
+- `ゼロ点調整が完了しました` → 実測値が0.5秒ごとに表示されればOK。`Ctrl+C`で終了
+- `ダミー値で動作します` → センサー未接続 or ライブラリ不足（ダミーでもテストは続行可）
+- 野菜台の風袋 `TARE_VEGE_PLATFORM = 148.0`（g）は台だけ乗せた実測値に要調整
+
+---
+
+## パート6: 本番起動（controller）
+
+### 6-1. controller起動（🍓 ラズパイ）
+
+```bash
+cd ~/advance_software_engnering/AdvSoftwareG5/app
+tmux new -s controller
 python3 controller.py
 ```
 
-期待する出力:
+`[Controller] AIモードで起動します（推論サーバー: http://100.98.67.33:8080）` と出て
+人待ちになる。
 
-```
-[Controller] AIモードで起動します（推論サーバー: http://192.168.1.10:8080）
-===================================
-Unmanned Sales System
-Waiting for customer...
-===================================
-```
+### 6-2. 動作シナリオ
 
-この状態で、監視カメラの画像が約1秒おきにサーバーへ送られ、人待ちになる。
+1. **監視カメラ（video0）の前に立つ** → `Customer detected.` → `Session started.`
+2. **コイン・野菜カメラ（video2）に硬貨を置く**（1枚ずつ、重ねない。100円玉が高精度）
+3. **監視カメラの前から離れて3秒待つ** → `Customer left.` → 万引き判定結果が表示
 
-### 4-3. 動作シナリオを実行
-
-1. **監視カメラ（index 0）の前に立つ**
-   → `Customer detected.` → `Session started.` と表示され、録画が始まる
-2. **コインカメラ（index 1）に硬貨を置く**（トレイに1枚ずつ、重ねない）
-   → coin.csv に金額が記録される（100円玉が最も認識精度が高い）
-3. **監視カメラの前から離れて3秒待つ**
-   → `Customer left.` → 野菜認識・重量記録 → 万引き判定が自動実行され、
-   `Theft Check Result` が表示される
-
-### 4-4. 結果ファイルの確認
+### 6-3. 結果確認（🍓 ラズパイ）
 
 ```bash
-ls ~/AdvSoftwereG5/sessions/
+ls ~/advance_software_engnering/AdvSoftwareG5/sessions/
+cat ~/advance_software_engnering/AdvSoftwareG5/sessions/<フォルダ名>/coin.csv
+cat ~/advance_software_engnering/AdvSoftwareG5/sessions/<フォルダ名>/session.json
 ```
-
-日時名のフォルダ（例 `20260712_140503`）ができている。中身を確認:
-
-```bash
-cd ~/AdvSoftwereG5/sessions/<フォルダ名>
-ls
-# coin.csv  monitor.mp4  session.json  vegetable.csv  weight.csv
-
-cat coin.csv        # 投入した硬貨が記録されているか
-cat session.json    # "judgement": "normal" または "theft" が入っているか
-```
-
-### 4-5. 繰り返しテスト・終了
-
-- controllerは自動で次の客待ちに戻るので、シナリオを何度でも繰り返せる
-- 終了: `Ctrl+C`
-- tmuxから抜ける（動かしたまま）: `Ctrl+b` → `d`／戻る: `tmux attach -t controller`
 
 ---
 
-## パート5: Flask管理画面まで繋げる場合（ラズパイ側）
+## パート7: Flask管理画面（🍓 ラズパイ、任意）
 
 ```bash
 tmux new -s flask
-cd ~/AdvSoftwereG5/Flask
+cd ~/advance_software_engnering/AdvSoftwareG5/Flask
+pip3 install flask --break-system-packages
 python3 app.py
 ```
 
-- `sessions自動監視を開始しました` と表示され、セッション完了から数秒で自動取込される
-- ブラウザで `http://<ラズパイのIP>:5000` を開くと管理画面が見える
-- 必要ライブラリ: `pip3 install flask`（LINE通知は担当者のトークン設定が必要）
+PCのブラウザで `http://<ラズパイのIP>:5000` を開くと管理画面。
+セッション完了の数秒後に売上・通知が自動反映される。
 
 ---
 
-## 付録A: Docker（ラズパイ）を使う場合
+## つまずき所まとめ（今回実際に起きた順）
 
-Python 3.10未満のラズパイや環境を汚したくない場合:
+| 症状 | 原因 | 解決 |
+|------|------|------|
+| サーバーが起動時にクラッシュ | yolov8s.pt をオフラインでDL試行 | モデルをリポジトリに同梱（対応済み） |
+| ラズパイで `No route to host` | LAN(192.168系)で別ネットワーク | Tailscale IP(100.x)を使う |
+| ラズパイで `Could not connect` | ①サーバー未起動 ②`localhost`を指定 | サーバー起動＋TailscaleIPを指定 |
+| ホストから8080に繋がらない | コンテナのポートが未公開 | ホストで socat 中継（パート2） |
+| `pip install` が `externally-managed` | Raspberry Pi OSのPEP668制限 | `apt install python3-xxx` か `--break-system-packages` |
+| `/dev/video*` が大量 | ラズパイ内蔵処理ブロック | USBカメラは偶数番の若い番号のみ |
 
-```bash
-cd ~/AdvSoftwereG5
-docker build -f .devcontainer/Dockerfile.rpi -t advsoftwareg5 .
-bash scripts/start-container.sh          # カメラ・GPIOを自動でコンテナに渡す
-docker exec -it advsoftwareg5_app bash   # コンテナに入る
-cd app && python controller.py
-```
+## よく使うコマンド早見表
 
-## 付録B: よく使うコマンド早見表
-
-| やりたいこと                   | コマンド                                                                         |
-| ------------------------------ | -------------------------------------------------------------------------------- |
-| サーバー画面に戻る（Ubuntu）   | `tmux attach -t server`                                                          |
-| tmuxから抜ける（動かしたまま） | `Ctrl+b` → `d`                                                                   |
-| サーバー疎通確認（ラズパイ）   | `curl http://<サーバーIP>:8080/status`                                           |
-| 静止画テスト（ラズパイ）       | `python3 app/simulate_raspi.py --image <画像> --server http://<サーバーIP>:8080` |
-| カメラテスト（ラズパイ）       | `python3 app/simulate_raspi.py --camera 0 --server http://<サーバーIP>:8080`     |
-| 制御なしのキーボードモード     | `cd app && python3 controller.py --dummy`                                        |
-| 重量センサー単体確認           | `cd app && python3 raspberry_pi.py`                                              |
-| カメラデバイス一覧             | `v4l2-ctl --list-devices`                                                        |
+| やりたいこと | 端末 | コマンド |
+|-------------|------|---------|
+| サーバー画面に戻る | 🖥️コンテナ | `tmux attach -t server` |
+| tmuxから抜ける | 共通 | `Ctrl+b` → `d` |
+| サーバー生存確認（curl無し） | 🖥️コンテナ | `python -c "import urllib.request; print(urllib.request.urlopen('http://localhost:8080/status').read())"` |
+| socat中継（ホスト） | 🖥️本体 | `socat TCP-LISTEN:8080,fork,reuseaddr TCP:172.17.0.2:8080 &` |
+| ラズパイから疎通 | 🍓ラズパイ | `curl http://100.98.67.33:8080/status` |
+| 静止画テスト | 🍓ラズパイ | `python3 app/simulate_raspi.py --image <画像> --server http://100.98.67.33:8080` |
+| カメラ一覧 | 🍓ラズパイ | `v4l2-ctl --list-devices` |
+| 重量センサー確認 | 🍓ラズパイ | `cd app && python3 raspberry_pi.py` |

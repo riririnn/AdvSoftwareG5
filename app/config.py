@@ -21,15 +21,17 @@ SESSION_DIR = PROJECT_ROOT / "sessions"
 # カメラ設定
 # ==========================================
 
-# カメラ2台構成: 監視=0 / コイン・野菜=1（共用）
+# カメラ2台構成: 監視=UVC Camera(video0) / コイン・野菜=C922(video2, 共用)
+# ※ USBカメラは1台につき2つのデバイス番号を占有し、偶数番のみ撮影可能。
+#   実機の番号は `v4l2-ctl --list-devices` で確認する（結合テスト機は 0 と 2）。
 # 監視カメラ
 MONITOR_CAMERA_INDEX = 0
 
 # コインカメラ
-COIN_CAMERA_INDEX = 1
+COIN_CAMERA_INDEX = 2
 
 # 野菜カメラ（コインカメラと共用）
-VEGETABLE_CAMERA_INDEX = 1
+VEGETABLE_CAMERA_INDEX = 2
 
 # 共通設定
 CAMERA_WIDTH = 640

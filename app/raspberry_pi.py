@@ -17,13 +17,23 @@
 
 【必要パッケージ（ラズパイのみ）】
   pip install RPi.GPIO hx711
+
+【hx711パッケージについての注意】
+  PyPIの `hx711` は実装違いのパッケージが複数存在し、API が異なる。
+  本モジュールは `get_raw_data()` のみを提供する版（mpibpc-mroose/hx711,
+  1.1.2.3で確認）に対応しており、ゼロ点調整・グラム換算は自前で実装している。
+  `set_scale_ratio` 等の高レベルAPIを持つ版が入っている場合は動作しないため、
+  `pip3 show hx711` でバージョンを確認すること。
 """
 
 import random
+import statistics
 
 # ---- センサー設定 ----
 COIN_DT_PIN  = 16
 COIN_SCK_PIN = 20
+# raw値(ADCカウント) → グラム の変換係数。おもり等で校正した実測値に置き換える。
+# weight_g = (raw - オフセット) / SCALE_RATIO
 COIN_SCALE_RATIO = 1880
 
 VEGE_DT_PIN  = 12
@@ -38,10 +48,22 @@ TARE_VEGE_PLATFORM = 148.0
 # （5サンプル×2センサー ≈ 1秒）。精度が足りない場合のみ増やす。
 SAMPLES_PER_READ = 5
 
+# ゼロ点調整（起動時のオフセット計測）に使うサンプル数
+ZERO_SAMPLES = 10
+
 # ---- センサーの実体（初回呼び出し時に1度だけ初期化）----
 _hx_coin = None
 _hx_vegetable = None
+_coin_offset = 0.0     # 起動時（無負荷）のraw平均値
 _sensor_available = None  # None=未判定, True=実機, False=ダミー
+
+
+def _read_raw_mean(hx, samples: int) -> float:
+    """指定回数センサーを読み、raw値(ADCカウント)の平均を返す。"""
+    data = hx.get_raw_data(samples)
+    if not data:
+        return 0.0
+    return statistics.mean(data)
 
 
 def _init_sensors() -> bool:
@@ -49,7 +71,7 @@ def _init_sensors() -> bool:
     センサーを初期化する。成功したら True。
     RPi.GPIO / hx711 がない環境（PC等）では False を返しダミー動作にする。
     """
-    global _hx_coin, _hx_vegetable
+    global _hx_coin, _hx_vegetable, _coin_offset
 
     try:
         import RPi.GPIO as GPIO
@@ -60,16 +82,15 @@ def _init_sensors() -> bool:
 
     GPIO.setmode(GPIO.BCM)
 
-    # ゼロ点調整(zero)は起動時の1回だけ行う。
+    # ゼロ点調整は起動時の1回だけ行う。
     # 計測のたびに行うと、物が乗った状態が基準になってしまうため厳禁。
     _hx_coin = HX711(dout_pin=COIN_DT_PIN, pd_sck_pin=COIN_SCK_PIN)
-    _hx_coin.set_scale_ratio(COIN_SCALE_RATIO)
-    _hx_coin.zero()
-    print("[raspberry_pi] コイン用センサーのゼロ点調整が完了しました。")
+    _coin_offset = _read_raw_mean(_hx_coin, ZERO_SAMPLES)
+    print(f"[raspberry_pi] コイン用センサーのゼロ点調整が完了しました。(offset={_coin_offset:.0f})")
 
     _hx_vegetable = HX711(dout_pin=VEGE_DT_PIN, pd_sck_pin=VEGE_SCK_PIN)
-    _hx_vegetable.set_scale_ratio(VEGE_SCALE_RATIO)
-    # 野菜用は台＋商品が常時乗っているため zero() せず、風袋(TARE)を差し引く方式
+    # 野菜用は台＋商品が常時乗っているため raw offsetは取らず、
+    # グラム換算後に風袋(TARE_VEGE_PLATFORM)を差し引く方式にする。
     print("[raspberry_pi] 野菜用センサーの初期化が完了しました。")
 
     return True
@@ -100,9 +121,11 @@ def get_weights():
             "coinbox": random.randint(900, 1000),
         }
 
-    coin_weight = _hx_coin.get_weight_mean(SAMPLES_PER_READ)
+    coin_raw = _read_raw_mean(_hx_coin, SAMPLES_PER_READ)
+    coin_weight = (coin_raw - _coin_offset) / COIN_SCALE_RATIO
 
-    total_vege = _hx_vegetable.get_weight_mean(SAMPLES_PER_READ)
+    vege_raw = _read_raw_mean(_hx_vegetable, SAMPLES_PER_READ)
+    total_vege = vege_raw / VEGE_SCALE_RATIO
     vege_weight = total_vege - TARE_VEGE_PLATFORM
     if vege_weight < 0.5:  # わずかなノイズ対策
         vege_weight = 0.0

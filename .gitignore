@@ -28,6 +28,9 @@ ai/runs/vegetables_v1/*
 ai/runs/vegetables_v1/weights/*
 !ai/runs/vegetables_v1/weights/best.pt
 
+# 人間検出用モデル(yolov8s.pt)も同梱してオフライン（ラズパイ/コンテナ）で動くようにする
+!ai/weights/yolov8s.pt
+
 # 作業メモ
 .devcontainer/todo.md
 # Web UI product images

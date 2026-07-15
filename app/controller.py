@@ -97,7 +97,13 @@ def _open_camera(camera_index: int) -> cv2.VideoCapture:
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
     cap.set(cv2.CAP_PROP_FPS, CAMERA_FPS)
-    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    # バッファ1枚だとMJPGフレームの受信完了前に読み出してしまい、
+    # 「Corrupt JPEG data」警告（デコード時のバイト単位の欠損）が
+    # 頻発することを実機で確認した。2枚に緩めて解消を図る。
+    # フレームは専用スレッド(_FrameGrabber)が常時ドレインするため、
+    # 2枚程度なら「読み取り間隔が空いて古いフレームが溜まる」問題
+    # （そもそもの1に絞った理由）は再発しない。
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, 2)
     return cap
 
 

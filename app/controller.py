@@ -80,11 +80,18 @@ _last_coin_counts: dict[str, int] = {}
 
 
 def _open_camera(camera_index: int) -> cv2.VideoCapture:
-    cap = cv2.VideoCapture(camera_index)
+    # バックエンドを明示的にV4L2に固定する。
+    # 未指定だとOpenCVがGStreamerバックエンドを先に試みて失敗し
+    # V4L2にフォールバックする（起動ログの warning はこれ）。
+    # バックエンドが曖昧だとCAP_PROP_BUFFERSIZE等の設定が効かない
+    # ことがあるため、明示的にV4L2を指定して挙動を確定させる。
+    cap = cv2.VideoCapture(camera_index, cv2.CAP_V4L2)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
-    # バッファを最小にして、詰まった古いフレームを溜め込まないようにする
-    # （USB帯域が逼迫した際にread()がタイムアウトしやすくなるのを緩和）
+    # バッファを最小にして、詰まった古いフレームを溜め込まないようにする。
+    # ネットワーク通信でread()の間隔が空くと、その間にカメラが送り続ける
+    # フレームで内部バッファが溢れて詰まり、select()タイムアウトに繋がる
+    # ことを実機で確認したため、バッファを持たせない設定にする。
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     return cap
 

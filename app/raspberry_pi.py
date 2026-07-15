@@ -111,8 +111,17 @@ def _try_realtime_priority():
     確認された。root権限があれば `sudo chrt -f 50 python3 ...` と
     同等の効果をコード側で自動設定する。root権限が無ければ何もせず
     通常優先度のまま動作する（root権限が必要なため失敗するのは正常）。
+
+    環境変数 DISABLE_RT_PRIORITY=1 が設定されている場合は、root権限が
+    あっても意図的に有効化しない。SCHED_FIFOがカメラ読み取り等の
+    他スレッドを飢餓状態にしていないかをA/B比較するための切り替え。
     """
     import os
+
+    if os.environ.get("DISABLE_RT_PRIORITY") == "1":
+        print("[raspberry_pi] DISABLE_RT_PRIORITY=1 のためリアルタイム優先度は設定しません。")
+        return
+
     try:
         os.sched_setscheduler(0, os.SCHED_FIFO, os.sched_param(50))
         print("[raspberry_pi] リアルタイム優先度(SCHED_FIFO)を設定しました。")

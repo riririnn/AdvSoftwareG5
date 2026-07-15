@@ -16,6 +16,7 @@ controller.py
 from pathlib import Path
 from datetime import datetime
 import argparse
+import threading
 import time
 
 import cv2
@@ -72,9 +73,6 @@ COIN_VALUES = {
 # 野菜集計から除外するクラス名（硬貨・紙幣・人間）
 NON_VEGETABLE_CLASSES = set(COIN_VALUES) | {"1000yen", "5000yen", "10000yen", "person"}
 
-# カメラは最初に使うときに開き、以後使い回す
-_cameras: dict[int, cv2.VideoCapture] = {}
-
 # 前回のコイン検出枚数（増えた分だけを新規投入と判定するための状態）
 _last_coin_counts: dict[str, int] = {}
 
@@ -88,46 +86,71 @@ def _open_camera(camera_index: int) -> cv2.VideoCapture:
     cap = cv2.VideoCapture(camera_index, cv2.CAP_V4L2)
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
-    # バッファを最小にして、詰まった古いフレームを溜め込まないようにする。
-    # ネットワーク通信でread()の間隔が空くと、その間にカメラが送り続ける
-    # フレームで内部バッファが溢れて詰まり、select()タイムアウトに繋がる
-    # ことを実機で確認したため、バッファを持たせない設定にする。
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     return cap
 
 
+class _FrameGrabber:
+    """
+    カメラを専用スレッドで継続的に読み続け、最新フレームを保持するクラス。
+
+    実機検証で、メインループがネットワーク通信(サーバーへの推論
+    リクエスト)で待っている間 cap.read() の呼び出し間隔が空くと、
+    その間もカメラは送信を続けるため内部状態がズレてタイムアウトに
+    陥ることを確認した（録画のみ・通信なしの連続読み取りでは
+    問題が一切起きなかった）。カメラの読み取りをメインループの
+    タイミングから完全に切り離し、常に途切れず読み続けることで解消する。
+    """
+
+    def __init__(self, camera_index: int):
+        self.camera_index = camera_index
+        self._cap = _open_camera(camera_index)
+        self._lock = threading.Lock()
+        self._latest_frame = None
+        self._running = True
+        self._thread = threading.Thread(target=self._loop, daemon=True)
+        self._thread.start()
+
+    def _loop(self):
+        while self._running:
+            if not self._cap.isOpened():
+                print(f"[Controller] カメラ {self.camera_index} を開けません。再接続を試みます...")
+                self._cap = _open_camera(self.camera_index)
+                time.sleep(0.5)
+                continue
+
+            ret, frame = self._cap.read()
+            if ret:
+                with self._lock:
+                    self._latest_frame = frame
+            else:
+                print(f"[Controller] カメラ {self.camera_index} の読み取りに失敗。再接続を試みます...")
+                self._cap.release()
+                self._cap = _open_camera(self.camera_index)
+
+    def read(self):
+        """最新のフレームを返す（まだ1枚も取得できていなければ None）。"""
+        with self._lock:
+            return self._latest_frame
+
+    def stop(self):
+        self._running = False
+        self._thread.join(timeout=2)
+        self._cap.release()
+
+
+# カメラは最初に使うときにグラバースレッドを起動し、以後使い回す
+_grabbers: dict[int, _FrameGrabber] = {}
+
+
 def _read_frame(camera_index: int):
-    """
-    指定カメラから1フレーム取得する。失敗時は None。
-
-    USB帯域の逼迫（Pi3は全USBポートが共有バス）等で read() が
-    タイムアウト/失敗することがあるため、失敗時はカメラを一度
-    閉じて再オープンし、1回だけ再試行する。
-    """
-    cap = _cameras.get(camera_index)
-    if cap is None:
-        cap = _open_camera(camera_index)
-        _cameras[camera_index] = cap
-
-    if not cap.isOpened():
-        print(f"[Controller] カメラ {camera_index} を開けません")
-        return None
-
-    ret, frame = cap.read()
-    if ret:
-        return frame
-
-    print(f"[Controller] カメラ {camera_index} の読み取りに失敗。再接続を試みます...")
-    cap.release()
-    cap = _open_camera(camera_index)
-    _cameras[camera_index] = cap
-
-    if not cap.isOpened():
-        print(f"[Controller] カメラ {camera_index} の再接続に失敗しました")
-        return None
-
-    ret, frame = cap.read()
-    return frame if ret else None
+    """指定カメラの最新フレームを取得する。まだ取得できていなければ None。"""
+    grabber = _grabbers.get(camera_index)
+    if grabber is None:
+        grabber = _FrameGrabber(camera_index)
+        _grabbers[camera_index] = grabber
+        time.sleep(0.5)  # 最初の1枚が取れるまで少し待つ
+    return grabber.read()
 
 
 def _predict_frame(frame, conf_threshold: float) -> list[dict]:

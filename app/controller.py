@@ -79,17 +79,44 @@ _cameras: dict[int, cv2.VideoCapture] = {}
 _last_coin_counts: dict[str, int] = {}
 
 
+def _open_camera(camera_index: int) -> cv2.VideoCapture:
+    cap = cv2.VideoCapture(camera_index)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
+    # バッファを最小にして、詰まった古いフレームを溜め込まないようにする
+    # （USB帯域が逼迫した際にread()がタイムアウトしやすくなるのを緩和）
+    cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
+    return cap
+
+
 def _read_frame(camera_index: int):
-    """指定カメラから1フレーム取得する。失敗時は None。"""
+    """
+    指定カメラから1フレーム取得する。失敗時は None。
+
+    USB帯域の逼迫（Pi3は全USBポートが共有バス）等で read() が
+    タイムアウト/失敗することがあるため、失敗時はカメラを一度
+    閉じて再オープンし、1回だけ再試行する。
+    """
     cap = _cameras.get(camera_index)
     if cap is None:
-        cap = cv2.VideoCapture(camera_index)
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
+        cap = _open_camera(camera_index)
         _cameras[camera_index] = cap
 
     if not cap.isOpened():
         print(f"[Controller] カメラ {camera_index} を開けません")
+        return None
+
+    ret, frame = cap.read()
+    if ret:
+        return frame
+
+    print(f"[Controller] カメラ {camera_index} の読み取りに失敗。再接続を試みます...")
+    cap.release()
+    cap = _open_camera(camera_index)
+    _cameras[camera_index] = cap
+
+    if not cap.isOpened():
+        print(f"[Controller] カメラ {camera_index} の再接続に失敗しました")
         return None
 
     ret, frame = cap.read()

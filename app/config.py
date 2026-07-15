@@ -59,7 +59,10 @@ VEGETABLE_CONF_THRESHOLD = 0.4
 PERSON_DISAPPEAR_TIME = 3.0
 
 # コイン認識周期（秒）
-COIN_DETECT_INTERVAL = 0.2
+# 0.2秒だとUSBカメラ2台+サーバーへのネットワーク推論が間に合わず、
+# Raspberry Pi 3の共有USBバスが逼迫してカメラのread()がタイムアウトする
+# ことを実機で確認したため、余裕を持たせている。
+COIN_DETECT_INTERVAL = 1.0
 
 # ==========================================
 # ログ設定

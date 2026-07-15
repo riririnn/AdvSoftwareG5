@@ -35,6 +35,7 @@ from config import (
     VEGETABLE_CAMERA_INDEX,
     CAMERA_WIDTH,
     CAMERA_HEIGHT,
+    CAMERA_FPS,
 )
 
 from csv_logger import (
@@ -84,8 +85,18 @@ def _open_camera(camera_index: int) -> cv2.VideoCapture:
     # バックエンドが曖昧だとCAP_PROP_BUFFERSIZE等の設定が効かない
     # ことがあるため、明示的にV4L2を指定して挙動を確定させる。
     cap = cv2.VideoCapture(camera_index, cv2.CAP_V4L2)
+
+    # 【重要】MJPG(圧縮)モードを必ず指定する。
+    # UVCカメラの既定は無圧縮YUYVで、640x480@30fpsで1台約18MB/s消費する。
+    # Raspberry Pi 3は全USBポートが1本のUSB2.0バス(実効〜35MB/s)を共有する
+    # ため、カメラ2台の同時使用で帯域が飽和し、約10秒周期の
+    # select() timeout が発生することを実機で確認した。
+    # MJPGなら1台あたり1〜3MB/s程度に収まり、2台同時でも余裕がある。
+    # ※ FOURCCは解像度設定より先に指定する（V4L2の作法）。
+    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))
     cap.set(cv2.CAP_PROP_FRAME_WIDTH, CAMERA_WIDTH)
     cap.set(cv2.CAP_PROP_FRAME_HEIGHT, CAMERA_HEIGHT)
+    cap.set(cv2.CAP_PROP_FPS, CAMERA_FPS)
     cap.set(cv2.CAP_PROP_BUFFERSIZE, 1)
     return cap
 
@@ -112,6 +123,11 @@ class _FrameGrabber:
         self._thread.start()
 
     def _loop(self):
+        # 読み取り周期の下限。通常はドライバのFPS設定(CAP_PROP_FPS)で
+        # ブロックされるため効かないが、設定が効かないカメラでの
+        # CPU全力ループを防ぐ保険として入れている。
+        min_interval = 1.0 / CAMERA_FPS
+
         while self._running:
             if not self._cap.isOpened():
                 print(f"[Controller] カメラ {self.camera_index} を開けません。再接続を試みます...")
@@ -119,6 +135,7 @@ class _FrameGrabber:
                 time.sleep(0.5)
                 continue
 
+            start = time.monotonic()
             ret, frame = self._cap.read()
             if ret:
                 with self._lock:
@@ -127,6 +144,12 @@ class _FrameGrabber:
                 print(f"[Controller] カメラ {self.camera_index} の読み取りに失敗。再接続を試みます...")
                 self._cap.release()
                 self._cap = _open_camera(self.camera_index)
+                continue
+
+            elapsed = time.monotonic() - start
+            wait = min_interval - elapsed
+            if wait > 0:
+                time.sleep(wait)
 
     def read(self):
         """最新のフレームを返す（まだ1枚も取得できていなければ None）。"""

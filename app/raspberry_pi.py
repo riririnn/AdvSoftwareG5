@@ -101,36 +101,45 @@ def _read_raw_mean(hx, samples: int, fallback: float = 0.0) -> float:
     return statistics.mean(values)
 
 
-def _try_realtime_priority():
+class _realtime_priority:
     """
-    プロセスをリアルタイムスケジューリング(SCHED_FIFO)に切り替える。
+    with文で囲んだ区間だけリアルタイムスケジューリング(SCHED_FIFO)にする
+    コンテキストマネージャ。
 
     HX711読み取りはSCKパルスを60マイクロ秒以内に収める必要があるが、
     通常優先度のPythonプロセスはOSのスケジューラに割り込まれてこれを
     頻繁に超過し、読み取りが100%失敗することが実機(Raspberry Pi 3)で
-    確認された。root権限があれば `sudo chrt -f 50 python3 ...` と
-    同等の効果をコード側で自動設定する。root権限が無ければ何もせず
-    通常優先度のまま動作する（root権限が必要なため失敗するのは正常）。
+    確認された。一方でプロセス全体を常時SCHED_FIFOにすると、
+    カメラ読み取りスレッド等の他の処理を圧迫するリスクがあるため、
+    **センサー読み取りの間だけ**昇格し、終わったら通常優先度に戻す。
 
-    環境変数 DISABLE_RT_PRIORITY=1 が設定されている場合は、root権限が
-    あっても意図的に有効化しない。SCHED_FIFOがカメラ読み取り等の
-    他スレッドを飢餓状態にしていないかをA/B比較するための切り替え。
+    root権限が無い場合は何もしない（通常優先度のまま計測する。
+    読み取り失敗が増える可能性があるため sudo での実行を推奨）。
     """
-    import os
 
-    if os.environ.get("DISABLE_RT_PRIORITY") == "1":
-        print("[raspberry_pi] DISABLE_RT_PRIORITY=1 のためリアルタイム優先度は設定しません。")
-        return
+    _warned = False
 
-    try:
-        os.sched_setscheduler(0, os.SCHED_FIFO, os.sched_param(50))
-        print("[raspberry_pi] リアルタイム優先度(SCHED_FIFO)を設定しました。")
-    except (PermissionError, OSError):
-        print(
-            "[raspberry_pi] 警告: リアルタイム優先度を設定できません（root権限が必要）。\n"
-            "                HX711の読み取りが不安定になる可能性があります。\n"
-            "                'sudo python3 controller.py' のように root で実行してください。"
-        )
+    def __enter__(self):
+        import os
+        self._elevated = False
+        try:
+            os.sched_setscheduler(0, os.SCHED_FIFO, os.sched_param(50))
+            self._elevated = True
+        except (PermissionError, OSError):
+            if not _realtime_priority._warned:
+                _realtime_priority._warned = True
+                print(
+                    "[raspberry_pi] 警告: リアルタイム優先度を設定できません（root権限が必要）。\n"
+                    "                HX711の読み取りが不安定になる可能性があります。\n"
+                    "                'sudo python3 controller.py' のように root で実行してください。"
+                )
+        return self
+
+    def __exit__(self, exc_type, exc_value, traceback):
+        import os
+        if self._elevated:
+            os.sched_setscheduler(0, os.SCHED_OTHER, os.sched_param(0))
+        return False
 
 
 def _init_sensors() -> bool:
@@ -147,20 +156,22 @@ def _init_sensors() -> bool:
         print("[raspberry_pi] RPi.GPIO/hx711 が見つかりません。ダミー値で動作します。")
         return False
 
-    _try_realtime_priority()
-
+    # 2台目のHX711初期化時に出る「This channel is already in use」警告を抑制
+    # （同一プロセス内でSCKピンを複数セットアップするための無害な警告）
+    GPIO.setwarnings(False)
     GPIO.setmode(GPIO.BCM)
 
-    # ゼロ点調整は起動時の1回だけ行う。
-    # 計測のたびに行うと、物が乗った状態が基準になってしまうため厳禁。
-    _hx_coin = HX711(dout_pin=COIN_DT_PIN, pd_sck_pin=COIN_SCK_PIN)
-    _coin_offset = _read_raw_mean(_hx_coin, ZERO_SAMPLES)
-    print(f"[raspberry_pi] コイン用センサーのゼロ点調整が完了しました。(offset={_coin_offset:.0f})")
+    with _realtime_priority():
+        # ゼロ点調整は起動時の1回だけ行う。
+        # 計測のたびに行うと、物が乗った状態が基準になってしまうため厳禁。
+        _hx_coin = HX711(dout_pin=COIN_DT_PIN, pd_sck_pin=COIN_SCK_PIN)
+        _coin_offset = _read_raw_mean(_hx_coin, ZERO_SAMPLES)
+        print(f"[raspberry_pi] コイン用センサーのゼロ点調整が完了しました。(offset={_coin_offset:.0f})")
 
-    _hx_vegetable = HX711(dout_pin=VEGE_DT_PIN, pd_sck_pin=VEGE_SCK_PIN)
-    # 野菜用は台＋商品が常時乗っているため raw offsetは取らず、
-    # グラム換算後に風袋(TARE_VEGE_PLATFORM)を差し引く方式にする。
-    print("[raspberry_pi] 野菜用センサーの初期化が完了しました。")
+        _hx_vegetable = HX711(dout_pin=VEGE_DT_PIN, pd_sck_pin=VEGE_SCK_PIN)
+        # 野菜用は台＋商品が常時乗っているため raw offsetは取らず、
+        # グラム換算後に風袋(TARE_VEGE_PLATFORM)を差し引く方式にする。
+        print("[raspberry_pi] 野菜用センサーの初期化が完了しました。")
 
     return True
 
@@ -190,10 +201,14 @@ def get_weights():
             "coinbox": random.randint(900, 1000),
         }
 
-    coin_raw = _read_raw_mean(_hx_coin, SAMPLES_PER_READ)
+    # 読み取りの間だけリアルタイム優先度に昇格する（60マイクロ秒制約のため）。
+    # 常時昇格するとカメラスレッド等を圧迫するため、この区間に限定する。
+    with _realtime_priority():
+        coin_raw = _read_raw_mean(_hx_coin, SAMPLES_PER_READ)
+        vege_raw = _read_raw_mean(_hx_vegetable, SAMPLES_PER_READ)
+
     coin_weight = (coin_raw - _coin_offset) / COIN_SCALE_RATIO
 
-    vege_raw = _read_raw_mean(_hx_vegetable, SAMPLES_PER_READ)
     total_vege = vege_raw / VEGE_SCALE_RATIO
     vege_weight = total_vege - TARE_VEGE_PLATFORM
     if vege_weight < 0.5:  # わずかなノイズ対策

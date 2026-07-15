@@ -101,6 +101,29 @@ def _read_raw_mean(hx, samples: int, fallback: float = 0.0) -> float:
     return statistics.mean(values)
 
 
+def _try_realtime_priority():
+    """
+    プロセスをリアルタイムスケジューリング(SCHED_FIFO)に切り替える。
+
+    HX711読み取りはSCKパルスを60マイクロ秒以内に収める必要があるが、
+    通常優先度のPythonプロセスはOSのスケジューラに割り込まれてこれを
+    頻繁に超過し、読み取りが100%失敗することが実機(Raspberry Pi 3)で
+    確認された。root権限があれば `sudo chrt -f 50 python3 ...` と
+    同等の効果をコード側で自動設定する。root権限が無ければ何もせず
+    通常優先度のまま動作する（root権限が必要なため失敗するのは正常）。
+    """
+    import os
+    try:
+        os.sched_setscheduler(0, os.SCHED_FIFO, os.sched_param(50))
+        print("[raspberry_pi] リアルタイム優先度(SCHED_FIFO)を設定しました。")
+    except (PermissionError, OSError):
+        print(
+            "[raspberry_pi] 警告: リアルタイム優先度を設定できません（root権限が必要）。\n"
+            "                HX711の読み取りが不安定になる可能性があります。\n"
+            "                'sudo python3 controller.py' のように root で実行してください。"
+        )
+
+
 def _init_sensors() -> bool:
     """
     センサーを初期化する。成功したら True。
@@ -114,6 +137,8 @@ def _init_sensors() -> bool:
     except ImportError:
         print("[raspberry_pi] RPi.GPIO/hx711 が見つかりません。ダミー値で動作します。")
         return False
+
+    _try_realtime_priority()
 
     GPIO.setmode(GPIO.BCM)
 

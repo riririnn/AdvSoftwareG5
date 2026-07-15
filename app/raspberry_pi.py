@@ -24,10 +24,22 @@
   1.1.2.3で確認）に対応しており、ゼロ点調整・グラム換算は自前で実装している。
   `set_scale_ratio` 等の高レベルAPIを持つ版が入っている場合は動作しないため、
   `pip3 show hx711` でバージョンを確認すること。
+
+【既知の不具合と対策（重要）】
+  このライブラリの get_raw_data() は、内部の _read() が失敗(False)を
+  返し続けると無限ループしてフリーズする。_read() はSCKパルスが
+  60マイクロ秒を超えると失敗扱いになる仕様で、Python製の
+  ソフトウェアビットバンギング実装ではラズパイ実機（特にPi 3など非力な
+  機種、カメラ等で負荷が高い状況）で頻繁にこの制限を超える。
+  そのため本モジュールは get_raw_data() を直接使わず、内部の _read() を
+  こちらで有限回数だけリトライする _read_raw_mean() を実装している。
+  配線・電源が正常でも発生しうる、ライブラリ側の既知の弱点であり
+  ハードウェア故障ではない。
 """
 
 import random
 import statistics
+import time
 
 # ---- センサー設定 ----
 COIN_DT_PIN  = 16
@@ -51,6 +63,10 @@ SAMPLES_PER_READ = 5
 # ゼロ点調整（起動時のオフセット計測）に使うサンプル数
 ZERO_SAMPLES = 10
 
+# _read()の最大リトライ回数と時間予算（これを超えたら諦めて既知の値にフォールバック）
+MAX_READ_ATTEMPTS = 100
+READ_TIME_BUDGET_SEC = 2.0
+
 # ---- センサーの実体（初回呼び出し時に1度だけ初期化）----
 _hx_coin = None
 _hx_vegetable = None
@@ -58,12 +74,31 @@ _coin_offset = 0.0     # 起動時（無負荷）のraw平均値
 _sensor_available = None  # None=未判定, True=実機, False=ダミー
 
 
-def _read_raw_mean(hx, samples: int) -> float:
-    """指定回数センサーを読み、raw値(ADCカウント)の平均を返す。"""
-    data = hx.get_raw_data(samples)
-    if not data:
-        return 0.0
-    return statistics.mean(data)
+def _read_raw_mean(hx, samples: int, fallback: float = 0.0) -> float:
+    """
+    指定回数センサーを読み、raw値(ADCカウント)の平均を返す。
+
+    ライブラリ標準の get_raw_data() は失敗時に無限リトライしてフリーズする
+    ため使わず、内部の _read() を有限回数だけ自前でリトライする。
+    時間予算・試行回数の上限に達したら fallback を返す（システムが停止しないことを優先）。
+    """
+    values = []
+    attempts = 0
+    start = time.monotonic()
+
+    while len(values) < samples:
+        if attempts >= MAX_READ_ATTEMPTS or (time.monotonic() - start) >= READ_TIME_BUDGET_SEC:
+            print(f"[raspberry_pi] 警告: 規定時間内に十分なサンプルが取れませんでした"
+                  f"（取得できた数: {len(values)}/{samples}）。取得できた値のみで計算します。")
+            break
+        attempts += 1
+        data = hx._read()  # ライブラリの内部メソッド。失敗時 False を返す
+        if data not in (False, -1):
+            values.append(data)
+
+    if not values:
+        return fallback
+    return statistics.mean(values)
 
 
 def _init_sensors() -> bool:
@@ -148,7 +183,6 @@ def cleanup():
 
 if __name__ == "__main__":
     # 単体動作確認: 0.5秒間隔で計測値を表示（Ctrl+C で終了）
-    import time
     try:
         while True:
             w = get_weights()

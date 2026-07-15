@@ -143,6 +143,19 @@ class _FrameGrabber:
 _grabbers: dict[int, _FrameGrabber] = {}
 
 
+def release_cameras():
+    """
+    起動中の全カメラグラバーを解放する。
+
+    Ctrl+C等での終了時に呼ばないと、カメラのハンドルやバックグラウンド
+    スレッドが残留し、次回起動時に「カメラを開けません」
+    (can't open camera by index) となることがある。
+    """
+    for grabber in _grabbers.values():
+        grabber.stop()
+    _grabbers.clear()
+
+
 def _read_frame(camera_index: int):
     """指定カメラの最新フレームを取得する。まだ取得できていなければ None。"""
     grabber = _grabbers.get(camera_index)
@@ -509,7 +522,18 @@ def main():
 
     controller = Controller()
 
-    controller.run()
+    try:
+        controller.run()
+    except KeyboardInterrupt:
+        print("\n[Controller] 終了処理中...")
+    finally:
+        release_cameras()
+        try:
+            from raspberry_pi import cleanup as cleanup_sensors
+            cleanup_sensors()
+        except Exception:
+            pass
+        print("[Controller] 終了しました。")
 
 
 if __name__ == "__main__":

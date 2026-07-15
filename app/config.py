@@ -62,7 +62,7 @@ PERSON_DISAPPEAR_TIME = 3.0
 # 0.2秒だとUSBカメラ2台+サーバーへのネットワーク推論が間に合わず、
 # Raspberry Pi 3の共有USBバスが逼迫してカメラのread()がタイムアウトする
 # ことを実機で確認したため、余裕を持たせている。
-COIN_DETECT_INTERVAL = 1.0
+COIN_DETECT_INTERVAL = 0.5
 
 # ==========================================
 # ログ設定

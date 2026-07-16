@@ -105,6 +105,12 @@ VEGETABLE_LOG_FILENAME = "vegetable.csv"
 VEGETABLE_BEFORE_IMAGE = "vegetable_before.jpg"
 VEGETABLE_AFTER_IMAGE = "vegetable_after.jpg"
 
+# 野菜検出が0件だったフェーズに書く「計測済みマーカー」の品目名。
+# 行が1つも無いと theft_checker が「データ欠損」と「0個だった」を
+# 区別できず、全品持ち去り（最重要の万引きケース）がERRORになるため必須。
+# 括弧付きにして実在のYOLOクラス名（英数字）と衝突しないようにしている。
+VEGETABLE_NONE_MARKER = "(none)"
+
 WEIGHT_LOG_FILENAME = "weight.csv"
 
 # ==========================================

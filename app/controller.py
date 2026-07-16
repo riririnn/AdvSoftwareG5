@@ -39,6 +39,7 @@ from config import (
     NO_MJPG_CAMERA_INDEXES,
     VEGETABLE_BEFORE_IMAGE,
     VEGETABLE_AFTER_IMAGE,
+    VEGETABLE_NONE_MARKER,
 )
 
 from csv_logger import (
@@ -449,6 +450,11 @@ class Controller:
                     count,
                 )
 
+            # 検出0件でも「計測は実施した」ことを記録する。
+            # 行が無いと theft_checker が「データ欠損」と区別できない
+            if not before_vegetables:
+                log_vegetable(session_dir, "before", VEGETABLE_NONE_MARKER, 0)
+
             # -----------------------------
             # 入店時重量取得
             # -----------------------------
@@ -555,6 +561,10 @@ class Controller:
                     name,
                     count,
                 )
+
+            # 全品持ち去り（検出0件）でも after の計測実施を記録する
+            if not after_vegetables:
+                log_vegetable(session_dir, "after", VEGETABLE_NONE_MARKER, 0)
 
             # -----------------------------
             # 退店後重量取得

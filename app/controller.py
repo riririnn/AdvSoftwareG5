@@ -193,14 +193,19 @@ def release_cameras():
     _grabbers.clear()
 
 
-def _read_frame(camera_index: int):
-    """指定カメラの最新フレームを取得する。まだ取得できていなければ None。"""
+def _get_grabber(camera_index: int) -> _FrameGrabber:
+    """指定カメラのグラバーを取得する（未起動なら起動する）。"""
     grabber = _grabbers.get(camera_index)
     if grabber is None:
         grabber = _FrameGrabber(camera_index)
         _grabbers[camera_index] = grabber
         time.sleep(0.5)  # 最初の1枚が取れるまで少し待つ
-    return grabber.read()
+    return grabber
+
+
+def _read_frame(camera_index: int):
+    """指定カメラの最新フレームを取得する。まだ取得できていなければ None。"""
+    return _get_grabber(camera_index).read()
 
 
 def _predict_frame(frame, conf_threshold: float) -> list[dict]:
@@ -424,8 +429,15 @@ class Controller:
             # -----------------------------
             # 録画開始
             # -----------------------------
+            # 録画はRecorder内の専用スレッドが実時間基準(RECORD_FPS周期)で
+            # 監視カメラの最新フレームを書き込む。メインループは推論の
+            # ネットワーク往復で数秒ブロックするため、ループから書き込むと
+            # 動画の再生時間が実時間より大幅に短くなる（実機で確認済み）。
 
-            self.recorder.start(session_dir)
+            if not USE_DUMMY_AI:
+                self.recorder.start(
+                    session_dir, _get_grabber(MONITOR_CAMERA_INDEX).read
+                )
 
             print("Session started.")
             print()
@@ -438,16 +450,14 @@ class Controller:
             while True:
 
                 # -------------------------
-                # 監視カメラのフレーム取得・録画
-                # （同じフレームを人検知にも使い回す）
+                # 監視カメラのフレーム取得
+                # （録画はRecorderのスレッドが行う。ここでの取得は人検知用）
                 # -------------------------
 
                 monitor_frame = None
 
                 if not USE_DUMMY_AI:
                     monitor_frame = _read_frame(MONITOR_CAMERA_INDEX)
-                    if monitor_frame is not None:
-                        self.recorder.write(monitor_frame)
 
                 # -------------------------
                 # コイン認識
@@ -564,6 +574,9 @@ def main():
     except KeyboardInterrupt:
         print("\n[Controller] 終了処理中...")
     finally:
+        # セッション中にCtrl+Cされた場合、録画スレッドを止めてから
+        # カメラを解放する（順序が逆だと解放済みカメラへ書き込みに行く）
+        controller.recorder.stop()
         release_cameras()
         try:
             from raspberry_pi import cleanup as cleanup_sensors

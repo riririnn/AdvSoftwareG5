@@ -21,6 +21,9 @@
   # YUYV(無圧縮)比較用（--no-mjpg。Corrupt JPEGはMJPG時のみ出る点に注意）
   python3 scripts/camera_diagnosis.py --cameras 0 2 --fps 10 --no-mjpg 2> /tmp/stderr.log
 
+  # 混在モード: video0のみYUYV・video2はMJPG（本番構成の再現、ステップB）
+  python3 scripts/camera_diagnosis.py --cameras 0 2 --fps 10 --no-mjpg-cameras 0 2> /tmp/stderr.log
+
 実行後、必ず以下で警告数を数えて記録表に記入する:
 
   grep -c "Corrupt JPEG" /tmp/stderr.log
@@ -69,16 +72,21 @@ def main():
                         help="テストするカメラ番号（例: --cameras 0 2）")
     parser.add_argument("--fps", type=int, default=10)
     parser.add_argument("--no-mjpg", action="store_true",
-                        help="MJPGを指定せず既定フォーマット(YUYV)で読む")
+                        help="MJPGを指定せず既定フォーマット(YUYV)で読む（全カメラ）")
+    parser.add_argument("--no-mjpg-cameras", type=int, nargs="+", default=[],
+                        help="指定したカメラ番号だけYUYVで読み、他はMJPGのまま（混在モード）")
     args = parser.parse_args()
 
-    mode = "YUYV(無圧縮)" if args.no_mjpg else "MJPG"
-    print(f"=== カメラ診断開始: cameras={args.cameras} fps={args.fps} mode={mode} {DURATION_SEC}秒 ===")
+    def use_mjpg(idx: int) -> bool:
+        return not args.no_mjpg and idx not in args.no_mjpg_cameras
+
+    modes = {idx: ("MJPG" if use_mjpg(idx) else "YUYV") for idx in args.cameras}
+    print(f"=== カメラ診断開始: cameras={args.cameras} fps={args.fps} mode={modes} {DURATION_SEC}秒 ===")
     print("※ stderr をリダイレクトし忘れていないか確認（使い方はスクリプト冒頭参照）")
 
     results: dict = {}
     threads = [
-        threading.Thread(target=watch, args=(idx, args.fps, not args.no_mjpg, results))
+        threading.Thread(target=watch, args=(idx, args.fps, use_mjpg(idx), results))
         for idx in args.cameras
     ]
     for t in threads:

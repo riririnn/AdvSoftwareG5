@@ -38,6 +38,20 @@ CAMERA_WIDTH = 640
 CAMERA_HEIGHT = 480
 CAMERA_FPS = 10
 
+# MJPGで開かないカメラのインデックス一覧（無圧縮YUYVで開く）。
+#
+# 監視カメラ(video0, UVC Camera 046d:081b)は、PC直結では正常に撮影できる
+# にもかかわらず、このラズパイ実機でMJPG転送時のみ"Corrupt JPEG data"警告
+# が高頻度（実測ほぼ100%のフレーム）で発生することを診断で確認した。
+# USBポート交換・電源電圧(vcgencmd get_throttled=0x0)確認でも解消せず、
+# ケーブルはカメラ一体型で交換不可。カメラ個体・ケーブル・ポート・電源の
+# いずれでもなく、Pi 3の非力なUSBコントローラとこのカメラのMJPG転送特性
+# との相性問題と判断した(docs/corrupt_jpeg_diagnosis.md 参照)。
+# JPEGデコード自体を行わないYUYVに切り替えることで原理的に解消する。
+# 帯域はvideo0単体なら10fps・640x480で問題にならない（他方のvideo2は
+# MJPGのまま=対策済みの帯域負荷のみ）。
+NO_MJPG_CAMERA_INDEXES = {MONITOR_CAMERA_INDEX}
+
 # ==========================================
 # AI推論サーバー設定
 # ==========================================

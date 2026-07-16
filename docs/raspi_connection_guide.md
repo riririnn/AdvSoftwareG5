@@ -1,10 +1,16 @@
 # 結合テスト 再開手順
 
 完了済み：サーバー起動・ポート公開・疎通確認・静止画推論・カメラ2台特定・
-重量センサー動作確認（コイン/野菜とも計測成功）。
+重量センサー動作確認（コイン/野菜とも計測成功）・
+カメラタイムアウト対策（MJPG化）・Corrupt JPEG対策（video0のみYUYV化、
+経緯は `docs/corrupt_jpeg_diagnosis.md`）・録画時間ズレ修正（録画スレッド化）。
+いずれも実機検証済み。
 
-**現在地: カメラ2台同時使用時のタイムアウト対策（MJPG化）を実装済み。
-その効果検証と、本番シナリオ1周の完走が残っている。**
+**現在地: 残りは (1) 野菜を実際に置いた本番シナリオ1周の完走
+（これまでのERROR判定は野菜未設置によるもので正常動作）、
+(2) weight.csv が0.0のままになる件の調査（コイン3枚投入でもcoinbox重量が
+0.0だった。センサー単体テスト `sudo python3 app/raspberry_pi.py` で切り分け）、
+(3) Flask管理画面の確認（任意）。**
 
 設計の背景・制約・障害対処の一覧は `docs/system_design.md` を参照。
 
@@ -61,44 +67,19 @@ curl http://100.98.67.33:8080/status
 
 ---
 
-## 4. カメラ2台同時テスト（🍓 ラズパイ、MJPG修正の効果検証）
+## 4. カメラ2台同時テスト（🍓 ラズパイ、本番構成の事前確認・任意）
 
-controller起動前に、修正の効果を単体で確認する。
-**2台同時に60秒読み続けて、タイムアウトが出ないこと**を見る:
+controller起動前にカメラ疎通を確認したい場合は、本番と同じ
+「video0=YUYV + video2=MJPG」構成の診断スクリプトを使う:
 
 ```bash
-python3 -c "
-import cv2, time, threading
-
-def watch(idx, results):
-    cap = cv2.VideoCapture(idx, cv2.CAP_V4L2)
-    cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*'MJPG'))
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
-    cap.set(cv2.CAP_PROP_FPS, 10)
-    ok_count = fail_count = 0
-    start = time.time()
-    while time.time() - start < 60:
-        ret, _ = cap.read()
-        if ret: ok_count += 1
-        else:
-            fail_count += 1
-            print(f'[video{idx}] {time.time()-start:.1f}s 失敗')
-    cap.release()
-    results[idx] = (ok_count, fail_count)
-
-results = {}
-t0 = threading.Thread(target=watch, args=(0, results))
-t2 = threading.Thread(target=watch, args=(2, results))
-t0.start(); t2.start(); t0.join(); t2.join()
-for idx, (ok, ng) in results.items():
-    print(f'video{idx}: 成功{ok} 失敗{ng}')
-"
+python3 scripts/camera_diagnosis.py --cameras 0 2 --fps 10 --no-mjpg-cameras 0 2> /tmp/stderr.log
+grep -c "Corrupt JPEG" /tmp/stderr.log
 ```
 
-- **両方とも失敗0** → 対策有効。手順5へ
-- **失敗が出る** → `cv2.VideoWriter_fourcc(*'MJPG')` の行を消して再実行し、
-  失敗が増えるか比較した結果を報告する（原因の再切り分けに使う）
+- **両方とも read失敗0・警告0** → 手順5へ（2026-07-16に確認済みの状態）
+- **失敗や警告が出る** → 結果を報告する。`docs/corrupt_jpeg_diagnosis.md` の
+  手順・記録表で再診断する
 
 ## 5. controller起動と本番シナリオ（🍓 ラズパイ）
 

@@ -100,6 +100,11 @@ COIN_LOG_FILENAME = "coin.csv"
 
 VEGETABLE_LOG_FILENAME = "vegetable.csv"
 
+# 野菜認識の判定根拠画像（検出枠つき）。before/afterを見比べることで
+# 「AIが何を見て野菜数を判定したか」を後から確認できる
+VEGETABLE_BEFORE_IMAGE = "vegetable_before.jpg"
+VEGETABLE_AFTER_IMAGE = "vegetable_after.jpg"
+
 WEIGHT_LOG_FILENAME = "weight.csv"
 
 # ==========================================

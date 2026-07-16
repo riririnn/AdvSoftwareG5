@@ -37,6 +37,8 @@ from config import (
     CAMERA_HEIGHT,
     CAMERA_FPS,
     NO_MJPG_CAMERA_INDEXES,
+    VEGETABLE_BEFORE_IMAGE,
+    VEGETABLE_AFTER_IMAGE,
 )
 
 from csv_logger import (
@@ -312,9 +314,34 @@ def detect_coin():
     return new_coins
 
 
-def detect_vegetables():
+def _draw_detections(frame, detections):
+    """
+    検出結果（bbox付き）を描き込んだフレームのコピーを返す。
+    元フレームはグラバーと共有しているため直接書き込まない。
+    """
+    annotated = frame.copy()
+    for det in detections:
+        bbox = det.get("bbox")
+        if not bbox:
+            continue
+        x1, y1, x2, y2 = bbox["x1"], bbox["y1"], bbox["x2"], bbox["y2"]
+        cv2.rectangle(annotated, (x1, y1), (x2, y2), (0, 255, 0), 2)
+        label = f'{det["class_name"]} {det["confidence"]:.2f}'
+        cv2.putText(annotated, label, (x1, max(y1 - 6, 12)),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 255, 0), 1)
+    return annotated
+
+
+def detect_vegetables(save_path=None):
     """
     野菜認識（野菜カメラ + vegetable YOLO）
+
+    Parameters
+    ----------
+    save_path : Path or None
+        指定すると、判定に使った画像を検出枠つきで保存する
+        （万引き判定の根拠を後から確認するため）。
+        検出0件でも「何も映っていなかった」証拠として素の画像を保存する。
 
     Returns
     -------
@@ -331,14 +358,28 @@ def detect_vegetables():
             "tomato": 2,
         }
 
-    detections = _predict(VEGETABLE_CAMERA_INDEX, VEGETABLE_CONF_THRESHOLD)
+    frame = _read_frame(VEGETABLE_CAMERA_INDEX)
+    if frame is None:
+        return {}
+
+    detections = _predict_frame(frame, VEGETABLE_CONF_THRESHOLD)
 
     counts: dict[str, int] = {}
+    vegetable_detections = []
     for det in detections:
         name = det["class_name"]
         if name in NON_VEGETABLE_CLASSES:
             continue
         counts[name] = counts.get(name, 0) + 1
+        vegetable_detections.append(det)
+
+    if save_path is not None:
+        # 保存に失敗しても判定処理（CSV記録・万引き判定）は続行する
+        try:
+            cv2.imwrite(str(save_path), _draw_detections(frame, vegetable_detections))
+        except Exception as e:
+            print(f"[Controller] 警告: 判定根拠画像を保存できませんでした: {e}")
+
     return counts
 
 
@@ -396,7 +437,9 @@ class Controller:
             # 入店時の野菜数保存
             # -----------------------------
 
-            before_vegetables = detect_vegetables()
+            before_vegetables = detect_vegetables(
+                save_path=session_dir / VEGETABLE_BEFORE_IMAGE
+            )
 
             for name, count in before_vegetables.items():
                 log_vegetable(
@@ -500,7 +543,9 @@ class Controller:
             # 退店後の野菜数保存
             # -----------------------------
 
-            after_vegetables = detect_vegetables()
+            after_vegetables = detect_vegetables(
+                save_path=session_dir / VEGETABLE_AFTER_IMAGE
+            )
 
             for name, count in after_vegetables.items():
 

@@ -1,18 +1,8 @@
-# 結合テスト 再開手順
+# 結合テスト 実行手順（最初から最後まで）
 
-完了済み：サーバー起動・ポート公開・疎通確認・静止画推論・カメラ2台特定・
-重量センサー動作確認（コイン/野菜とも計測成功）・
-カメラタイムアウト対策（MJPG化）・Corrupt JPEG対策（video0のみYUYV化、
-経緯は `docs/corrupt_jpeg_diagnosis.md`）・録画時間ズレ修正（録画スレッド化）。
-いずれも実機検証済み。
-
-**現在地: 残りは (1) 野菜を実際に置いた本番シナリオ1周の完走
-（これまでのERROR判定は野菜未設置によるもので正常動作）、
-(2) weight.csv が0.0のままになる件の調査（コイン3枚投入でもcoinbox重量が
-0.0だった。センサー単体テスト `sudo python3 app/raspberry_pi.py` で切り分け）、
-(3) Flask管理画面の確認（任意）。**
-
-設計の背景・制約・障害対処の一覧は `docs/system_design.md` を参照。
+この手順書は、サーバー起動からラズパイでの本番シナリオ実行、管理画面での確認までを
+一気通貫で行うための完全版である。誰が実施しても同じ手順・同じ結果になるよう、
+コマンドはすべてコピペ可能な完成形で記載する。
 
 ## この構成の実機情報
 
@@ -23,11 +13,33 @@
 
 - 作業ブランチ: **`integration-test`**（サーバー・ラズパイ両方）
 - 接続は **Tailscale経由**（`localhost` や `192.168.x.x` は使わない）
-- カメラ設定（`app/config.py`）: 監視=`video0` / コイン・野菜=`video2`
+- カメラ構成（`app/config.py`）: 監視=`video0`（UVC Camera 046d:081b, C310）/
+  コイン・野菜=`video2`（C922 Pro Stream Webcam, 共用）
+- 設計の背景・制約・障害対処の一覧は `docs/system_design.md` を参照
+- カメラのCorrupt JPEG問題の詳細な診断記録は `docs/corrupt_jpeg_diagnosis.md` を参照
+
+## 現在の状態（2026-07-16時点）
+
+以下は解決済み。カメラ・録画・判定ロジックまわりは実機で安定動作を確認している。
+
+- ✅ カメラ2台同時使用時の `select() timeout`（MJPG化で解消）
+- ✅ video0の `Corrupt JPEG data` 警告（video0のみYUYVに切替、`NO_MJPG_CAMERA_INDEXES`で解消）
+- ✅ `monitor.mp4` の録画時間が実時間とズレる問題（録画専用スレッド化で解消）
+- ✅ 野菜が全部持ち去られた（after検出0件）とERROR判定になる問題（マーカー行方式で解消）
+- ✅ 判定根拠として `vegetable_before.jpg` / `vegetable_after.jpg`（検出枠つき）を自動保存
+
+未解決・既知の注意点:
+
+- ⚠️ video0のUSB接続が物理的に不安定になることがある（`dmesg`に
+  `device descriptor read/64, error -32` 等が出て一時的に `can't open camera by index`
+  になる）。コード側で再接続リトライはしているが、頻発する場合はケーブル・
+  コネクタの接触を物理的に確認する
+- ⚠️ 重量センサー（コイン用）が0.0のままだったことがあった。硬貨がロードセルの
+  上に正しく乗っているか物理配置を確認する（別セッションでは正常値143.9gを記録済み）
 
 ---
 
-## 1. サーバー再起動（🖥️ コンテナ内）
+## 1. サーバー起動（🖥️ コンテナ内）
 
 ```bash
 cd /workspace
@@ -39,7 +51,7 @@ python app/web_server.py
 
 `Starting minimal web server on port 8080...` が出れば成功。`Ctrl+b` → `d` でデタッチ。
 
-## 2. socat中継の再起動（🖥️ Ubuntu本体 `rin@rin-office`）
+## 2. socat中継の起動（🖥️ Ubuntu本体 `rin@rin-office`）
 
 前回のターミナルを閉じていれば中継は止まっているので、再度張る。
 まず🖥️コンテナ内で `hostname -I` を実行してコンテナのIPを確認し（例: 172.17.0.2）、
@@ -59,27 +71,42 @@ curl http://localhost:8080/status   # → {"sales_count": 0, ...} が返ればOK
 
 ## 3. ラズパイを最新化して疎通確認（🍓 ラズパイ）
 
+ラズパイの `app/config.py` には `PREDICT_SERVER_URL` をTailscale IPに書き換えた
+ローカル変更が残っているため、`git pull` の前に必ず退避する。
+
 ```bash
 cd ~/advance_software_engnering/AdvSoftwareG5
+git stash
 git pull
+git stash pop
+```
+
+`stash pop` 後に `app/config.py` の差分を確認し、`PREDICT_SERVER_URL` が
+`http://100.98.67.33:8080` になっていることを確認する:
+
+```bash
+git diff config.py    # app/ディレクトリの中にいる場合。リポジトリルートなら app/config.py
+```
+
+疎通確認:
+
+```bash
 curl http://100.98.67.33:8080/status
 ```
 
----
+## 4. カメラ動作確認（🍓 ラズパイ、任意・トラブル時の切り分け用）
 
-## 4. カメラ2台同時テスト（🍓 ラズパイ、本番構成の事前確認・任意）
-
-controller起動前にカメラ疎通を確認したい場合は、本番と同じ
-「video0=YUYV + video2=MJPG」構成の診断スクリプトを使う:
+普段はスキップしてよい。`select() timeout` や `Corrupt JPEG` が疑われる場合のみ、
+本体コードに依存しない診断専用スクリプトで確認する:
 
 ```bash
+cd ~/advance_software_engnering/AdvSoftwareG5
 python3 scripts/camera_diagnosis.py --cameras 0 2 --fps 10 --no-mjpg-cameras 0 2> /tmp/stderr.log
 grep -c "Corrupt JPEG" /tmp/stderr.log
 ```
 
-- **両方とも read失敗0・警告0** → 手順5へ（2026-07-16に確認済みの状態）
-- **失敗や警告が出る** → 結果を報告する。`docs/corrupt_jpeg_diagnosis.md` の
-  手順・記録表で再診断する
+- **警告0件・両カメラとも550フレーム以上・read失敗0** → 正常。手順5へ進む
+- 異常が出た場合は `docs/corrupt_jpeg_diagnosis.md` の診断手順に従う
 
 ## 5. controller起動と本番シナリオ（🍓 ラズパイ）
 
@@ -88,21 +115,26 @@ cd ~/advance_software_engnering/AdvSoftwareG5/app
 sudo python3 controller.py
 ```
 
-※ `sudo`のみでよい（`chrt`や環境変数は不要になった。重量読み取りの
-瞬間だけ自動でリアルタイム優先度に切り替わる）。
+※ `sudo`のみでよい（`chrt`や環境変数は不要。重量読み取りの瞬間だけ
+自動でリアルタイム優先度に切り替わる）。
 
 ### 動作シナリオ
 
 1. **監視カメラ（video0）の前に立つ** → `Customer detected.` → `Session started.`
-2. **コイン・野菜カメラ（video2）に硬貨を置く**（1枚ずつ、重ねない。100円玉が高精度）
-3. **監視カメラの前から離れて3秒待つ** → `Customer left.` → 万引き判定結果が表示
+2. **野菜カメラ（video2）に野菜を置く**（入店時の在庫として記録される）
+3. **コイン・野菜カメラ（video2）に硬貨を置く**（1枚ずつ、重ねない。100円玉が高精度）
+4. 万引きを試す場合は、セッション中に野菜を取り去る（重量センサーの上から動かす）
+5. **監視カメラの前から離れて3秒待つ** → `Customer left.` → 万引き判定結果が表示
 
 ### 成功条件
 
 - [ ] `select() timeout` が出ない（60秒以上）
+- [ ] `Corrupt JPEG` が大量に出ない
 - [ ] coin.csv に投入した硬貨が記録される
-- [ ] vegetable.csv に before/after 両方が記録される（判定がERRORにならない）
+- [ ] vegetable.csv に before/after 両方が記録される（全部持ち去った場合は
+      after側が `(none),0` のマーカー行になる。これはERRORではなく正常）
 - [ ] session.json に `"judgement": "normal"` または `"theft"` が入る
+- [ ] monitor.mp4 の再生時間がセッションの実時間とほぼ一致する
 
 ### 結果確認
 
@@ -110,34 +142,76 @@ sudo python3 controller.py
 ls ~/advance_software_engnering/AdvSoftwareG5/sessions/
 cat ~/advance_software_engnering/AdvSoftwareG5/sessions/<フォルダ名>/coin.csv
 cat ~/advance_software_engnering/AdvSoftwareG5/sessions/<フォルダ名>/vegetable.csv
+cat ~/advance_software_engnering/AdvSoftwareG5/sessions/<フォルダ名>/weight.csv
 cat ~/advance_software_engnering/AdvSoftwareG5/sessions/<フォルダ名>/session.json
 ```
 
----
-
-## 6. Flask管理画面（🍓 ラズパイ、任意）
+判定根拠画像（検出枠つき）も確認できる:
 
 ```bash
-tmux new -s flask
-cd ~/advance_software_engnering/AdvSoftwareG5/Flask
-python3 app.py
+ls ~/advance_software_engnering/AdvSoftwareG5/sessions/<フォルダ名>/vegetable_*.jpg
 ```
 
-PCのブラウザで `http://<ラズパイのIP>:5000` を開くと管理画面。
-セッション完了の数秒後に売上・通知が自動反映される。
+PCで動画・画像を目視したい場合は、PC側のターミナルでTailscale経由でscpする:
+
+```bash
+scp aseg1@100.120.189.9:~/advance_software_engnering/AdvSoftwareG5/sessions/<フォルダ名>/monitor.mp4 ./
+scp "aseg1@100.120.189.9:~/advance_software_engnering/AdvSoftwareG5/sessions/<フォルダ名>/vegetable_*.jpg" .
+```
+
+## 6. 管理画面（web_admin）での確認（🍓 ラズパイ）
+
+旧 `Flask/` ディレクトリは廃止され、現在は `app/web_admin/` に移行済み。
+`sessions/` フォルダを自動監視し、セッション完了時に在庫更新・売上/通知履歴への
+反映・LINE通知送信までを自動で行う。
+
+```bash
+cd ~/advance_software_engnering/AdvSoftwareG5/app
+python3 -m web_admin.web_app
+```
+
+起動時に `sessions/` 内の既存セッションから履歴を復元し
+（`sync_web_histories_from_sessions`）、その後5秒間隔でバックグラウンド監視を
+開始する（`WATCH_INTERVAL_SEC` 環境変数で変更可）。
+
+ターミナルを開いたままにしたくない場合は `tmux` を使うと便利
+（無くても動作には影響しない。単にターミナルを閉じるとプロセスも終わるだけ）:
+
+```bash
+sudo apt update && sudo apt install -y tmux   # 未インストールの場合のみ
+tmux new -s webadmin
+cd ~/advance_software_engnering/AdvSoftwareG5/app
+python3 -m web_admin.web_app
+# Ctrl+b → d でデタッチ
+```
+
+PCのブラウザで開く:
+
+```
+http://100.120.189.9:5000
+```
+
+### 確認すること
+
+- [ ] 直近のセッションの判定結果（購入/万引き）が売上履歴・通知履歴に反映されている
+- [ ] `normal`判定のセッションで在庫数が減少している
+- [ ] LINE通知が送信される設定であれば、通知が届いている
 
 ---
 
 ## 中断する場合
 
 ```bash
-Ctrl+C   # controller は終了処理（カメラ・GPIO解放）が自動で走る
+Ctrl+C   # controller は終了処理（録画スレッド停止・カメラ・GPIO解放）が自動で走る
 ```
 
 作業内容はすべて `integration-test` ブランチにpush済みなので何も失われない。
-次回は本手順書の「1. サーバー再起動」から再開すればよい。
+次回は本手順書の「1. サーバー起動」から再開すればよい。
 
 ## トラブル時
 
-`docs/system_design.md` の「6. 既知の障害モードと対処表」を参照
-（今回の結合テストで実際に起きた事象と対処の一覧）。
+- カメラ関連（`Corrupt JPEG` / `select() timeout` / `can't open camera by index`）
+  → `docs/corrupt_jpeg_diagnosis.md` の診断手順、および本書「現在の状態」の
+    既知の注意点を参照
+- その他の障害モードと対処表 → `docs/system_design.md` の
+  「6. 既知の障害モードと対処表」を参照

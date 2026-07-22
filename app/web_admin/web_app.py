@@ -58,6 +58,41 @@ except ImportError:
     )
     from line_notify import send_line_message, send_line_video_message
 
+try:
+    from .hardware_display import (
+        setup_hardware,
+        show_paid,
+        show_unpaid,
+        show_current_product_from_config,
+        stop_buzzer,
+    )
+except ImportError:
+    try:
+        from hardware_display import (
+            setup_hardware,
+            show_paid,
+            show_unpaid,
+            show_current_product_from_config,
+            stop_buzzer,
+        )
+    except Exception as error:
+        print("hardware_display.py を読み込めませんでした:", error)
+
+        def setup_hardware():
+            pass
+
+        def show_paid():
+            pass
+
+        def show_unpaid(shortage=0):
+            pass
+
+        def show_current_product_from_config():
+            pass
+
+        def stop_buzzer():
+            pass
+
 
 app = Flask(__name__)
 
@@ -723,6 +758,9 @@ def process_session_path(session_path, ignore_stability=False, force_reprocess=F
     line_results = []
 
     if judgement == "normal":
+        # 支払い完了判定の瞬間に緑LEDを点灯し、ブザーを停止する
+        show_paid()
+
         inventory_result = update_inventory_from_session(decreased_items)
 
         add_sales_records_from_session(
@@ -747,6 +785,9 @@ def process_session_path(session_path, ignore_stability=False, force_reprocess=F
         line_results.append(send_line_message(message))
 
     elif judgement == "theft":
+        # 万引き・未払い判定の瞬間に赤LEDを点灯し、確認ボタンが押されるまでブザーを鳴らす
+        show_unpaid(shortage)
+
         inventory_result = update_inventory_from_session(decreased_items)
 
         add_notification_records_from_session(
@@ -1163,6 +1204,7 @@ def api_add_or_update_product():
 
     if isinstance(result, dict):
         if result.get("status") == "success":
+            show_current_product_from_config()
             return jsonify(result)
 
         if result.get("status") == "exists":
@@ -1197,6 +1239,7 @@ def api_delete_product():
         }), 400
 
     delete_product(item_name)
+    show_current_product_from_config()
 
     return jsonify({
         "status": "success",
@@ -1263,6 +1306,8 @@ def api_set_weight_sensor_target():
             "message": "重量センサー対象の設定に失敗しました。"
         }), 400
 
+    show_current_product_from_config()
+
     return jsonify({
         "status": "success",
         "message": "重量センサー対象を設定しました。",
@@ -1299,6 +1344,16 @@ def api_delete_weight_sensor():
         "status": "success",
         "message": f"{sensor_id} を削除しました。",
         "settings": get_weight_sensor_settings()
+    })
+
+
+@app.route("/api/hardware/stop-buzzer", methods=["POST"])
+def api_stop_buzzer():
+    """Web画面側から確認済みとしてブザーを止める補助API。物理確認ボタンが基本だが、デモ時にも使える。"""
+    stop_buzzer()
+    return jsonify({
+        "status": "success",
+        "message": "ブザーを停止しました。"
     })
 
 
@@ -1399,6 +1454,10 @@ def api_clear_processed_sessions():
 
 
 if __name__ == "__main__":
+    # LED・ブザー・確認ボタン・LCD電子値札を初期化する
+    setup_hardware()
+    show_current_product_from_config()
+
     # 起動時に sessions フォルダの内容を基準にWeb履歴を復元する
     sync_web_histories_from_sessions()
 

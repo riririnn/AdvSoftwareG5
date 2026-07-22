@@ -712,15 +712,18 @@ def process_session_path(session_path, ignore_stability=False, force_reprocess=F
 
     session_id = get_session_id(session_path, session_data)
 
-    # 取込対象のsessionフォルダには、判定結果に関係なくmonitor.mp4を必ず用意する
-    ensure_default_video_in_session(session_path.parent)
-
+    # すでに処理済みのsessionは、動画コピーやプレビュー生成も行わずにスキップする。
+    # root所有のsessionフォルダに対して、monitor_preview.jpgを毎回作ろうとして
+    # permission denied が繰り返し出ることを防ぐ。
     if session_id in processed_session_ids and not force_reprocess:
         return {
             "status": "skipped",
             "message": "このsession.jsonはすでに反映済みです。",
             "session_id": session_id
         }
+
+    # 取込対象のsessionフォルダには、判定結果に関係なくmonitor.mp4を必ず用意する
+    ensure_default_video_in_session(session_path.parent)
 
     status = session_data.get("status", "")
     theft_check = get_theft_check(session_data)
@@ -748,6 +751,12 @@ def process_session_path(session_path, ignore_stability=False, force_reprocess=F
     decreased_items = get_decreased_items(theft_check)
 
     if not decreased_items:
+        # theft_check まで存在しているfinished sessionで、減少商品が空の場合は
+        # 後から内容が変わらない恒久的なエラーとして扱う。
+        # 処理済みにしないと、自動監視で同じエラーを5秒ごとに出し続ける。
+        processed_session_ids.add(session_id)
+        save_processed_session_ids()
+
         return {
             "status": "error",
             "message": "減少した商品情報がありません。",

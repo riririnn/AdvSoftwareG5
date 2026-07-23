@@ -33,7 +33,8 @@ BUZZER_PIN = 22
 CONFIRM_BUTTON_PIN = 23
 
 # I2C LCDのアドレス。多くは 0x27 または 0x3f。
-LCD_ADDRESS = 0x27
+# 実機で `sudo i2cdetect -y 1` を実行し 0x3f で応答することを確認済み。
+LCD_ADDRESS = 0x3f
 
 BASE_DIR = Path(__file__).resolve().parent
 # app/web_admin/hardware_display.py から見た制御側共通設定ファイル

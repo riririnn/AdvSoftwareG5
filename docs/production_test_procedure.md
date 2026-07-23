@@ -1,4 +1,4 @@
-# 本番テスト 完全手順書（最初から最後まで）
+ｄ# 本番テスト 完全手順書（最初から最後まで）
 
 これまでの結合テストで解決した全ての不具合（カメラ・録画・野菜判定・web_admin）を
 踏まえた、**本番シナリオを通しで実行するための完全版手順書**。上から順に実施すれば
@@ -6,10 +6,10 @@
 
 ## 前提・全体構成
 
-| 役割 | マシン | Tailscale IP |
-|------|--------|-------------|
+| 役割         | マシン                                    | Tailscale IP     |
+| ------------ | ----------------------------------------- | ---------------- |
 | 推論サーバー | rin-office（Ubuntu, GPU, DevContainer内） | **100.98.67.33** |
-| ラズパイ | aseg1（Raspberry Pi 3 B+） | 100.120.189.9 |
+| ラズパイ     | aseg1（Raspberry Pi 3 B+）                | 100.120.189.9    |
 
 - 作業ブランチ: **`integration-test`**（サーバー・ラズパイ両方）
 - 接続は **Tailscale経由**（`localhost` や `192.168.x.x` は使わない）
@@ -231,9 +231,9 @@ Ctrl+C   # controllerは終了処理（録画スレッド停止・カメラ・GP
 
 ## トラブル時の参照先
 
-| 症状 | 参照先 |
-|------|--------|
-| カメラ関連（`Corrupt JPEG` / `select() timeout` / `can't open camera by index`） | `docs/corrupt_jpeg_diagnosis.md` |
-| web_adminの既知の不具合・対応状況 | `app/web_admin/KNOWN_ISSUES.md` |
-| その他の障害モードと対処表 | `docs/system_design.md` の「6. 既知の障害モードと対処表」 |
-| 通しの操作手順の別バージョン（旧版） | `docs/raspi_connection_guide.md` |
+| 症状                                                                             | 参照先                                                    |
+| -------------------------------------------------------------------------------- | --------------------------------------------------------- |
+| カメラ関連（`Corrupt JPEG` / `select() timeout` / `can't open camera by index`） | `docs/corrupt_jpeg_diagnosis.md`                          |
+| web_adminの既知の不具合・対応状況                                                | `app/web_admin/KNOWN_ISSUES.md`                           |
+| その他の障害モードと対処表                                                       | `docs/system_design.md` の「6. 既知の障害モードと対処表」 |
+| 通しの操作手順の別バージョン（旧版）                                             | `docs/raspi_connection_guide.md`                          |

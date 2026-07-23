@@ -21,17 +21,21 @@ SESSION_DIR = PROJECT_ROOT / "sessions"
 # カメラ設定
 # ==========================================
 
-# カメラ2台構成: 監視=C922(video2) / コイン・野菜=UVC Camera(video0, 共用)
+# カメラ2台構成: 監視=UVC Camera(video0) / コイン・野菜=C922(video2, 共用)
 # ※ USBカメラは1台につき2つのデバイス番号を占有し、偶数番のみ撮影可能。
 #   実機の番号は `v4l2-ctl --list-devices` で確認する（結合テスト機は 0 と 2）。
+#
+# コイン・野菜カメラはC922(Pro Stream Webcam)を使うこと。C310は認識モデルが
+# 硬貨を検出できない（検出0件。モデルの学習データやC922との画角・焦点距離の
+# 違いが原因と推測）ことを実機テストで確認しているため、コイン・野菜用途には使わない。
 # 監視カメラ
-MONITOR_CAMERA_INDEX = 2
+MONITOR_CAMERA_INDEX = 0
 
 # コインカメラ
-COIN_CAMERA_INDEX = 0
+COIN_CAMERA_INDEX = 2
 
 # 野菜カメラ（コインカメラと共用）
-VEGETABLE_CAMERA_INDEX = 0
+VEGETABLE_CAMERA_INDEX = 2
 
 # 共通設定
 CAMERA_WIDTH = 640

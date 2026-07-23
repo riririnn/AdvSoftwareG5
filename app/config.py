@@ -21,17 +21,17 @@ SESSION_DIR = PROJECT_ROOT / "sessions"
 # カメラ設定
 # ==========================================
 
-# カメラ2台構成: 監視=UVC Camera(video0) / コイン・野菜=C922(video2, 共用)
+# カメラ2台構成: 監視=C922(video2) / コイン・野菜=UVC Camera(video0, 共用)
 # ※ USBカメラは1台につき2つのデバイス番号を占有し、偶数番のみ撮影可能。
 #   実機の番号は `v4l2-ctl --list-devices` で確認する（結合テスト機は 0 と 2）。
 # 監視カメラ
-MONITOR_CAMERA_INDEX = 0
+MONITOR_CAMERA_INDEX = 2
 
 # コインカメラ
-COIN_CAMERA_INDEX = 2
+COIN_CAMERA_INDEX = 0
 
 # 野菜カメラ（コインカメラと共用）
-VEGETABLE_CAMERA_INDEX = 2
+VEGETABLE_CAMERA_INDEX = 0
 
 # 共通設定
 CAMERA_WIDTH = 640
@@ -40,17 +40,25 @@ CAMERA_FPS = 10
 
 # MJPGで開かないカメラのインデックス一覧（無圧縮YUYVで開く）。
 #
-# 監視カメラ(video0, UVC Camera 046d:081b)は、PC直結では正常に撮影できる
-# にもかかわらず、このラズパイ実機でMJPG転送時のみ"Corrupt JPEG data"警告
-# が高頻度（実測ほぼ100%のフレーム）で発生することを診断で確認した。
-# USBポート交換・電源電圧(vcgencmd get_throttled=0x0)確認でも解消せず、
-# ケーブルはカメラ一体型で交換不可。カメラ個体・ケーブル・ポート・電源の
-# いずれでもなく、Pi 3の非力なUSBコントローラとこのカメラのMJPG転送特性
-# との相性問題と判断した(docs/corrupt_jpeg_diagnosis.md 参照)。
+# ⚠️ ここは「監視カメラ/コインカメラ」という役割ではなく、
+# 「UVC Camera(046d:081b, Logicool C310)が挿さっている物理デバイス番号」を
+# 直接指定すること。役割(MONITOR_CAMERA_INDEX等)が入れ替わっても、
+# このカメラ個体固有の問題は物理デバイス番号についてまわるため。
+#
+# このC310は、PC直結では正常に撮影できるにもかかわらず、このラズパイ実機で
+# MJPG転送時のみ"Corrupt JPEG data"警告が高頻度（実測ほぼ100%のフレーム）で
+# 発生することを診断で確認した。USBポート交換・電源電圧
+# (vcgencmd get_throttled=0x0)確認でも解消せず、ケーブルはカメラ一体型で
+# 交換不可。カメラ個体・ケーブル・ポート・電源のいずれでもなく、Pi 3の
+# 非力なUSBコントローラとこのカメラのMJPG転送特性との相性問題と判断した
+# (docs/corrupt_jpeg_diagnosis.md 参照)。
 # JPEGデコード自体を行わないYUYVに切り替えることで原理的に解消する。
-# 帯域はvideo0単体なら10fps・640x480で問題にならない（他方のvideo2は
+# 帯域は単体なら10fps・640x480で問題にならない（もう一方のC922は
 # MJPGのまま=対策済みの帯域負荷のみ）。
-NO_MJPG_CAMERA_INDEXES = {MONITOR_CAMERA_INDEX}
+#
+# v4l2-ctl --list-devices で "UVC Camera (046d:081b)" が指しているデバイス
+# 番号を確認し、挿し替え等で番号が変わった場合はここも合わせて変更すること。
+NO_MJPG_CAMERA_INDEXES = {0}
 
 # 録画(monitor.mp4)のフレームレート。カメラ取得のCAMERA_FPSとは独立。
 # 録画は専用スレッドがこの周期で最新フレームを書き込む方式のため、

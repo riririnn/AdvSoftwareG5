@@ -457,6 +457,32 @@ def create_default_products():
     return default_products
 
 
+def merge_with_default_products(loaded_products):
+    """
+    Webの商品選択欄には、常に47種類の商品候補を表示する。
+
+    app/config.py には、結合テスト用に tomato / eggplant だけが
+    書かれている場合がある。
+    その内容だけを products にすると、Webの商品選択欄も
+    トマト・なすだけになってしまう。
+
+    そこで、まず47種類のデフォルト商品マスタを作成し、
+    data_store.json や config.py から読み込んだ登録済み商品を
+    その上に重ねる。
+    これにより、商品選択欄は47種類を維持しつつ、
+    登録済み商品の価格・単重量のバリエーションも保持できる。
+    """
+    merged_products = create_default_products()
+
+    if isinstance(loaded_products, dict):
+        for product_id, product in loaded_products.items():
+            if not isinstance(product, dict):
+                continue
+            merged_products[product_id] = product
+
+    return merged_products
+
+
 def normalize_products(raw_products):
     """
     既存のdata_store.jsonから商品情報を読み込む。
@@ -554,10 +580,12 @@ def load_web_store():
         loaded_products = data.get("products", {})
         loaded_inventory = data.get("inventory", {})
 
-        products = normalize_products(loaded_products)
-
-        if not products:
-            products = create_default_products()
+        # data_store.jsonに保存されている商品だけでなく、
+        # 47種類の商品候補も必ず保持する。
+        # これにより、既存のdata_store.jsonがトマト・なすだけでも、
+        # Webの商品登録プルダウンには全商品が表示される。
+        loaded_normalized_products = normalize_products(loaded_products)
+        products = merge_with_default_products(loaded_normalized_products)
 
         inventory = normalize_inventory(loaded_inventory, products)
 
@@ -653,7 +681,11 @@ def load_from_config_py():
         if not isinstance(vegetable_weights, dict):
             vegetable_weights = {}
 
-        products = {}
+        # app/config.py に書かれている商品が一部だけでも、
+        # Webの商品選択欄には47種類の候補を表示したい。
+        # そのため、まずデフォルト商品マスタを作り、
+        # config.py の商品設定を上書き・追加する。
+        loaded_config_products = {}
 
         if vegetable_prices:
             for label, price in vegetable_prices.items():
@@ -663,15 +695,15 @@ def load_from_config_py():
                 price = int(price)
                 product_id = make_product_id(label, price, weight)
 
-                products[product_id] = {
+                loaded_config_products[product_id] = {
                     "display_name": display_name,
                     "label": label,
                     "price": price,
                     "weight": weight,
                     "active": True
                 }
-        else:
-            products = create_default_products()
+
+        products = merge_with_default_products(loaded_config_products)
 
         inventory = {}
 

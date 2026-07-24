@@ -45,3 +45,12 @@ data_store.json
 processed_sessions.json
 monitor.mp4
 monitor_preview.jpg
+# Web admin runtime data
+runtime/
+app/web_admin/mail_attachments/
+app/web_admin/users.json
+app/web_admin/shop_data/
+app/web_admin/data_store.json
+app/web_admin/processed_sessions.json
+app/web_admin/monitor.mp4
+app/web_admin/monitor_preview.jpg

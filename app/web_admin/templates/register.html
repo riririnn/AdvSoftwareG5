@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>初回登録 | 無人販売支援システム</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}" />
+</head>
+<body class="auth-body">
+    <main class="auth-card wide">
+        <div class="auth-brand">
+            <div class="brand-icon">🛒</div>
+            <div>
+                <h1>初回登録</h1>
+                <p>販売所専用の管理ページを作成します</p>
+            </div>
+        </div>
+
+        {% if error %}
+        <div class="auth-error">{{ error }}</div>
+        {% endif %}
+
+        <form method="post" class="auth-form two-column-form">
+            <label>
+                販売所名
+                <input type="text" name="shop_name" placeholder="例：山田農園 無人販売所" required />
+            </label>
+            <label>
+                管理者名
+                <input type="text" name="manager_name" placeholder="例：山田太郎" required />
+            </label>
+            <label>
+                ログイン用メールアドレス
+                <input type="email" name="email" placeholder="例：yamada@example.com" required autocomplete="email" />
+            </label>
+            <label>
+                ログイン用パスワード
+                <input type="password" name="password" required autocomplete="new-password" />
+            </label>
+            <div class="auth-info full-span">
+                登録したメールアドレスは、ログイン用として使うだけでなく、購入通知・万引き通知・動画通知の初期通知先として自動登録されます。
+                家族や共同管理者にも通知したい場合は、ログイン後の設定画面から通知先を追加できます。
+            </div>
+            <button type="submit" class="primary-button full-span">登録して管理画面を開く</button>
+        </form>
+
+        <p class="auth-link">すでに登録済みの場合は <a href="{{ url_for('login') }}">ログイン</a></p>
+    </main>
+</body>
+</html>

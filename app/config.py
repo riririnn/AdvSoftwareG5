@@ -35,7 +35,7 @@ MONITOR_CAMERA_INDEX = 0
 COIN_CAMERA_INDEX = 2
 
 # 野菜カメラ（コインカメラと共用）
-VEGETABLE_CAMERA_INDEX = 4
+VEGETABLE_CAMERA_INDEX = 2
 
 # 共通設定
 CAMERA_WIDTH = 640
@@ -78,7 +78,7 @@ RECORD_FPS = 3
 
 # GPU推論サーバー（app/web_server.py）のURL。
 # 別マシンで動かす場合はそのIPに変更する（例: "http://192.168.1.10:8080"）
-PREDICT_SERVER_URL = "http://100.98.67.33:8080"
+PREDICT_SERVER_URL = "http://localhost:8080"
 
 # 検出として採用する信頼度の下限（これ未満の検出は無視）
 PERSON_CONF_THRESHOLD = 0.5

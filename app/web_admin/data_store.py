@@ -856,8 +856,12 @@ def export_to_config_py():
     new_product_setting = f'''"""
 商品設定（価格・単重量・重量センサーの割り当て）。
 
-このファイルは **git管理外**（.gitignore対象）で、実機ごとに内容が異なる。
-Web管理画面（app/web_admin）の操作により自動生成される。
+このファイルはWeb管理画面（app/web_admin）の操作により自動生成される。
+実機ごとに内容が異なるため、実機側では以下を1回実行して、
+ローカルの書き換えが git の追跡対象にならないようにすること:
+
+    git update-index --skip-worktree app/product_settings.py
+
 手で編集してもよいが、次にWeb管理画面から操作した時点で上書きされる。
 """
 

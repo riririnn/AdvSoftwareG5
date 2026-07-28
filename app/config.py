@@ -131,8 +131,10 @@ WEIGHT_LOG_FILENAME = "weight.csv"
 
 # 商品の価格・単重量・重量センサーの割り当ては、Web管理画面(app/web_admin)が
 # 実行中に書き換えるためサーバーとラズパイで一致しない。
-# config.py は両者で同一に保つファイルなので、product_settings.py
-# （.gitignore対象）へ分離している。
+# config.py は両者で同一に保つファイルなので、product_settings.py へ分離している。
+# product_settings.py は初期値をgitにコミットしてあるが、実機側では
+# `git update-index --skip-worktree app/product_settings.py` を1回実行して、
+# ローカルの書き換えが追跡対象にならないようにする。
 from product_settings import (  # noqa: E402
     VEGETABLE_PRICES,
     TARGET_VEGETABLE,

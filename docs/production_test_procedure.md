@@ -1,4 +1,4 @@
-ｄ# 本番テスト 完全手順書（最初から最後まで）
+# 本番テスト 完全手順書（最初から最後まで）
 
 これまでの結合テストで解決した全ての不具合（カメラ・録画・野菜判定・web_admin）を
 踏まえた、**本番シナリオを通しで実行するための完全版手順書**。上から順に実施すれば
@@ -47,24 +47,40 @@ curl http://localhost:8080/status   # → {"sales_count": 0, ...} が返ればOK
 
 ## 3. ラズパイを最新化（🍓 ラズパイ）
 
-`app/config.py`に`PREDICT_SERVER_URL`のTailscale IP設定がローカル変更として
-残っているため、`git pull`前に必ず退避する。
+```bash
+cd ~/advance_software_engnering/AdvSoftwareG5
+git pull
+```
+
+`PREDICT_SERVER_URL`（Tailscale IP）とカメラ設定は`app/config.py`に
+コミット済みで、サーバー・ラズパイで同一内容を使う。以前必要だった
+`git stash` は不要になった。
+
+### 3-1. 初回のみ: 商品設定ファイルを追跡対象から外す
+
+商品の価格・単重量・重量センサーの割り当ては`app/product_settings.py`に
+分離してあり、**Web管理画面の操作でこのファイルが自動的に書き換わる**。
+初期値はgitにコミットされているので`git pull`で入手できるが、
+そのままだと書き換わるたびに`git pull`が衝突する。以下を**1回だけ**実行して、
+ローカルの書き換えをgitが追跡しないようにする:
 
 ```bash
 cd ~/advance_software_engnering/AdvSoftwareG5
-git stash
-git pull
-git stash pop
+git update-index --skip-worktree app/product_settings.py
 ```
 
-`app/config.py`の差分を確認し、`PREDICT_SERVER_URL`が
-`http://100.98.67.33:8080`になっていることを確認:
+設定できたか確認（先頭が`S`なら成功）:
 
 ```bash
-git diff config.py    # app/ディレクトリの中にいる場合。リポジトリルートなら app/config.py
+git ls-files -v app/product_settings.py
 ```
 
-疎通確認:
+⚠️ この設定をした後は、`app/product_settings.py`への**上流の変更が
+pullできなくなる**。上流でこのファイルを更新した場合は、一度
+`git update-index --no-skip-worktree app/product_settings.py`で解除し、
+`git pull`してから再度設定し直すこと。
+
+### 3-2. 疎通確認
 
 ```bash
 curl http://100.98.67.33:8080/status
@@ -100,6 +116,7 @@ LED・ブザー・確認ボタンを初期化しました。
 sessionsフォルダからWeb履歴を同期しました: 売上 N件, 通知 N件
 sessions自動監視を開始しました: .../sessions
  * Running on http://192.168.x.x:5000
+ http://100.120.189.9:5000/
 ```
 
 エラーが出る場合の対処:

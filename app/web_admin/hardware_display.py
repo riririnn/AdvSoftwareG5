@@ -1,42 +1,22 @@
 """
-LED・ブザー・確認ボタン・LCD電子値札制御
+LCD電子値札制御。
 
 仕様:
-- normal判定: 緑LED ON、赤LED OFF、ブザー停止
-- theft判定 : 赤LED ON、緑LED OFF、確認ボタンが押されるまでブザー鳴動
-- 確認ボタンを押すと、ブザーだけ停止する
-- LCDには sensor_1 に設定された商品名を半角カタカナで表示する
-- 1行目には「1ｺ 商品名」、2行目には「100ｸﾞﾗﾑ 150ｴﾝ」の形式で表示する
+- LCDにはsensor_1に設定された商品情報だけを表示する
+- 1行目: 商品名 1コ
+- 2行目: 1個当たりの重量と価格
+- 支払い待ち、支払い完了、未払い、万引きなどの状態は表示しない
+- LED・ブザー・確認ボタンはapp/payment_indicator.pyを通じて
+  controller.pyだけが制御する
 
 1602 LCDのA00文字マップで表示できるASCIIと半角カタカナだけを送る。
-WindowsやGPIO未接続環境ではエラーでWebを止めない。
+WindowsやLCD未接続環境ではエラーでWebを停止しない。
 """
 
 from pathlib import Path
 import importlib.util
 import os
 import threading
-
-try:
-    from config import (
-        RED_LED_PIN,
-        GREEN_LED_PIN,
-        BUZZER_PIN,
-        CONFIRM_BUTTON_PIN,
-    )
-except Exception:
-    # 単体実行や旧設定との互換用フォールバック
-    RED_LED_PIN = 17
-    GREEN_LED_PIN = 27
-    BUZZER_PIN = 22
-    CONFIRM_BUTTON_PIN = 23
-
-try:
-    from gpiozero import LED, Buzzer, Button
-except Exception:
-    LED = None
-    Buzzer = None
-    Button = None
 
 try:
     from RPLCD.i2c import CharLCD
@@ -106,12 +86,8 @@ LCD_KATAKANA_NAMES = {
 
 
 BASE_DIR = Path(__file__).resolve().parent
-APP_CONFIG_PATH = BASE_DIR.parent / "config.py"
+PRODUCT_SETTINGS_PATH = BASE_DIR.parent / "product_settings.py"
 
-red_led = None
-green_led = None
-buzzer = None
-confirm_button = None
 lcd = None
 
 # Web処理などからLCDへ同時に書き込まないようにする。
@@ -119,154 +95,40 @@ _lcd_lock = threading.RLock()
 
 
 def setup_hardware():
-    """Flask起動時に1回だけ呼び出す。"""
-    global red_led, green_led, buzzer, confirm_button, lcd
-
-    # LED・ブザー・確認ボタンはcontroller.pyが一括して所有する。
-    # Flaskとcontroller.pyが同じGPIOを同時に開くと競合するため、Web側では
-    # 既定で初期化しない。旧運用へ一時的に戻す場合のみ環境変数を明示する。
-    enable_web_gpio = os.getenv("WEB_ADMIN_ENABLE_GPIO", "0").strip() == "1"
-
-    if not enable_web_gpio:
-        print(
-            "LED・ブザー・確認ボタンはcontroller.py側で制御します。"
-            "Web管理画面ではGPIOを開きません。"
-        )
-    elif LED is None or Buzzer is None or Button is None:
-        print(
-            "gpiozero が使えないため、"
-            "LED・ブザー・確認ボタン制御は無効です。"
-        )
-    else:
-        try:
-            red_led = LED(RED_LED_PIN)
-            green_led = LED(GREEN_LED_PIN)
-            buzzer = Buzzer(BUZZER_PIN)
-
-            confirm_button = Button(
-                CONFIRM_BUTTON_PIN,
-                pull_up=True,
-                bounce_time=0.1,
-            )
-            confirm_button.when_pressed = stop_buzzer
-
-            show_idle()
-
-            print("Web管理画面側でGPIOを初期化しました。")
-
-        except Exception as error:
-            print(
-                "LED・ブザー・確認ボタンの初期化に失敗しました:",
-                error,
-            )
-
-            red_led = None
-            green_led = None
-            buzzer = None
-            confirm_button = None
-
-    # 電子値札LCD
-    if CharLCD is None:
-        print("RPLCD が使えないため、LCD電子値札は無効です。")
-    else:
-        try:
-            lcd = CharLCD(
-                i2c_expander="PCF8574",
-                address=LCD_ADDRESS,
-                port=1,
-                cols=LCD_COLS,
-                rows=LCD_ROWS,
-                charmap=LCD_CHARMAP,
-
-                # 自動改行と手動のカーソル移動が競合しないようにする。
-                auto_linebreaks=False,
-            )
-
-            lcd.clear()
-
-            print(
-                "LCD電子値札を初期化しました。"
-                f"I2Cアドレス: {hex(LCD_ADDRESS)}, "
-                f"charmap: {LCD_CHARMAP}"
-            )
-
-        except Exception as error:
-            print("LCD電子値札の初期化に失敗しました:", error)
-            lcd = None
-
-
-def show_idle():
-    """待機状態にする。"""
-    if red_led:
-        red_led.off()
-
-    if green_led:
-        green_led.off()
-
-    if buzzer:
-        buzzer.off()
-
-
-def show_paid():
-    """支払い完了時の表示とハードウェア制御。"""
-    if red_led:
-        red_led.off()
-
-    if green_led:
-        green_led.on()
-
-    if buzzer:
-        buzzer.off()
-
-    write_lcd(
-        "ｼﾊﾗｲ ｶﾝﾘｮｳ",
-        "ｱﾘｶﾞﾄｳｺﾞｻﾞｲﾏｽ",
-    )
-
-    print("支払い完了: 緑LED ON、ブザー停止")
-
-
-def show_unpaid(shortage=0):
-    """
-    万引き・未払い判定時の表示。
-
-    確認ボタンが押されるまでブザーを鳴らす。
-    """
-    if red_led:
-        red_led.on()
-
-    if green_led:
-        green_led.off()
-
-    if buzzer:
-        buzzer.on()
-
-    try:
-        shortage = max(0, int(shortage))
-    except (TypeError, ValueError):
-        shortage = 0
-
-    write_lcd(
-        "ｼﾊﾗｲ ﾌｿｸ",
-        f"ｱﾄ {shortage}ｴﾝ",
-    )
+    """Flask起動時にLCDだけを初期化する。"""
+    global lcd
 
     print(
-        f"万引き・未払い判定: 不足金額 {shortage}円。"
-        "確認ボタンでブザー停止。"
+        "支払い状態はcontroller.py側のLED・ブザーで通知します。"
+        "LCDには商品情報だけを表示します。"
     )
 
+    if CharLCD is None:
+        print("RPLCD が使えないため、LCD電子値札は無効です。")
+        return
 
-def stop_buzzer():
-    """
-    確認ボタン押下時にブザーだけを停止する。
+    try:
+        lcd = CharLCD(
+            i2c_expander="PCF8574",
+            address=LCD_ADDRESS,
+            port=1,
+            cols=LCD_COLS,
+            rows=LCD_ROWS,
+            charmap=LCD_CHARMAP,
+            auto_linebreaks=False,
+        )
 
-    赤LEDは警告状態として残す。
-    """
-    if buzzer:
-        buzzer.off()
+        lcd.clear()
 
-    print("確認ボタンが押されたため、ブザーを停止しました。")
+        print(
+            "LCD電子値札を初期化しました。"
+            f"I2Cアドレス: {hex(LCD_ADDRESS)}, "
+            f"charmap: {LCD_CHARMAP}"
+        )
+
+    except Exception as error:
+        print("LCD電子値札の初期化に失敗しました:", error)
+        lcd = None
 
 
 def _lcd_text(value):
@@ -495,19 +357,19 @@ def show_current_product_from_store():
 
 
 def load_config_module():
-    """app/config.pyを直接読み込む。"""
-    if not APP_CONFIG_PATH.exists():
-        print("config.pyが見つかりません:", APP_CONFIG_PATH)
+    """app/product_settings.pyを直接読み込む。"""
+    if not PRODUCT_SETTINGS_PATH.exists():
+        print("product_settings.pyが見つかりません:", PRODUCT_SETTINGS_PATH)
         return None
 
     try:
         spec = importlib.util.spec_from_file_location(
-            "mujin_runtime_config",
-            APP_CONFIG_PATH,
+            "mujin_runtime_product_settings",
+            PRODUCT_SETTINGS_PATH,
         )
 
         if spec is None or spec.loader is None:
-            print("config.pyの読み込み設定を作成できませんでした。")
+            print("product_settings.pyの読み込み設定を作成できませんでした。")
             return None
 
         module = importlib.util.module_from_spec(spec)
@@ -516,14 +378,14 @@ def load_config_module():
         return module
 
     except Exception as error:
-        print("config.pyの読み込みに失敗しました:", error)
+        print("product_settings.pyの読み込みに失敗しました:", error)
         return None
 
 
 def show_current_product_from_config():
     """
     起動直後など、Web管理データがまだ選択されていない場合に、
-    config.pyから商品情報を取得して表示する。
+    product_settings.pyから商品情報を取得して表示する。
 
     通常の商品登録・削除・センサー変更後は、
     show_current_product_from_store()を使用する。

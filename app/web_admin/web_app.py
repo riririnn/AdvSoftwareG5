@@ -78,21 +78,15 @@ except ImportError:
 try:
     from .hardware_display import (
         setup_hardware,
-        show_paid,
-        show_unpaid,
         show_current_product_from_config,
         show_current_product_from_store,
-        stop_buzzer,
     )
 except ImportError:
     try:
         from hardware_display import (
             setup_hardware,
-            show_paid,
-            show_unpaid,
             show_current_product_from_config,
             show_current_product_from_store,
-            stop_buzzer,
         )
     except Exception as error:
         print("hardware_display.py を読み込めませんでした:", error)
@@ -100,19 +94,10 @@ except ImportError:
         def setup_hardware():
             pass
 
-        def show_paid():
-            pass
-
-        def show_unpaid(shortage=0):
-            pass
-
         def show_current_product_from_config():
             pass
 
         def show_current_product_from_store():
-            pass
-
-        def stop_buzzer():
             pass
 
 
@@ -942,9 +927,8 @@ def process_session_path(session_path, ignore_stability=False, force_reprocess=F
     line_results = []
 
     if judgement == "normal":
-        # 支払い完了判定の瞬間に緑LEDを点灯し、ブザーを停止する
-        show_paid()
-
+        # LED・ブザーはcontroller.py側で制御する。
+        # LCDは商品情報を維持し、支払い結果を表示しない。
         inventory_result = update_inventory_from_session(decreased_items)
 
         add_sales_records_from_session(
@@ -969,9 +953,8 @@ def process_session_path(session_path, ignore_stability=False, force_reprocess=F
         line_results.append(send_line_message(message, notice_type="purchase"))
 
     elif judgement == "theft":
-        # 万引き・未払い判定の瞬間に赤LEDを点灯し、確認ボタンが押されるまでブザーを鳴らす
-        show_unpaid(shortage)
-
+        # LED・ブザーはcontroller.py側で制御する。
+        # LCDは商品情報を維持し、未払い結果を表示しない。
         inventory_result = update_inventory_from_session(decreased_items)
 
         add_notification_records_from_session(
@@ -1713,7 +1696,7 @@ def api_clear_processed_sessions():
 
 
 if __name__ == "__main__":
-    # LED・ブザー・確認ボタン・LCD電子値札を初期化する
+    # LCD電子値札だけを初期化する
     setup_hardware()
     show_current_product_from_config()
 

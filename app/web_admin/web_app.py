@@ -691,6 +691,14 @@ def create_video_preview_image(video_path):
     if preview_path.exists():
         return preview_path
 
+    # controller.pyをsudoで実行して作られた過去sessionは、
+    # Web管理画面の実行ユーザーから書き込めない場合がある。
+    # OpenCVのcv2.imwrite()を呼ぶとpermission denied警告が大量に出るため、
+    # 書き込み不可のsessionではプレビュー生成だけを静かにスキップする。
+    # session.jsonの読み込み、売上・通知履歴、動画通知には影響しない。
+    if not os.access(preview_path.parent, os.W_OK):
+        return None
+
     try:
         capture = cv2.VideoCapture(str(video_path))
 

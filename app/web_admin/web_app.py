@@ -81,6 +81,7 @@ try:
         show_paid,
         show_unpaid,
         show_current_product_from_config,
+        show_current_product_from_store,
         stop_buzzer,
     )
 except ImportError:
@@ -90,6 +91,7 @@ except ImportError:
             show_paid,
             show_unpaid,
             show_current_product_from_config,
+            show_current_product_from_store,
             stop_buzzer,
         )
     except Exception as error:
@@ -105,6 +107,9 @@ except ImportError:
             pass
 
         def show_current_product_from_config():
+            pass
+
+        def show_current_product_from_store():
             pass
 
         def stop_buzzer():
@@ -251,6 +256,7 @@ def register():
         "video_notice": True,
         "system_notice": True,
     })
+    show_current_product_from_store()
 
     session.clear()
     session["user_email"] = email
@@ -277,6 +283,10 @@ def login():
     session["manager_name"] = user.get("manager_name", "")
     session["shop_name"] = user.get("shop_name", "")
     session["shop_id"] = user.get("shop_id", "")
+
+    set_current_shop_id(session.get("shop_id"))
+    load_web_store()
+    show_current_product_from_store()
     return redirect(url_for("index"))
 
 
@@ -1320,6 +1330,9 @@ def api_update_inventory_count():
 
     result = set_inventory(item_name, count)
 
+    if result:
+        show_current_product_from_store()
+
     if not result:
         return jsonify({
             "status": "error",
@@ -1381,6 +1394,7 @@ def api_add_or_update_product():
 
     if isinstance(result, dict):
         if result.get("status") == "success":
+            show_current_product_from_store()
             return jsonify(result)
 
         if result.get("status") == "exists":
@@ -1415,6 +1429,7 @@ def api_delete_product():
         }), 400
 
     delete_product(item_name)
+    show_current_product_from_store()
 
     return jsonify({
         "status": "success",
@@ -1471,6 +1486,9 @@ def api_set_weight_sensor_target():
         }), 400
 
     result = set_weight_sensor_target(sensor_id, item_name)
+
+    if result:
+        show_current_product_from_store()
 
     if not result:
         return jsonify({

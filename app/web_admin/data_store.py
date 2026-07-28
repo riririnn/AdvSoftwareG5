@@ -467,6 +467,9 @@ def create_default_products():
     """
     47クラス分の商品候補を作る。
     初期在庫は空にするため、inventoryには入れない。
+
+    productsは「商品登録画面の候補マスタ」と「登録済みの価格・重量別商品」を
+    兼ねているため、未登録の商品候補も常に残しておく。
     """
     default_products = {}
 
@@ -485,6 +488,21 @@ def create_default_products():
         }
 
     return default_products
+
+
+def merge_with_default_product_master(current_products):
+    """
+    保存済み商品へ47クラスの商品候補を補完する。
+
+    config.pyは登録済み商品だけへ書き換えられるため、config.pyだけを元に
+    productsを作ると、最初に登録したトマトなど1種類しか商品登録画面へ
+    表示されなくなる。商品候補マスタを先に作り、保存済みの価格・重量別商品を
+    上書き・追加することで、常に全商品を選択できるようにする。
+    """
+    merged = create_default_products()
+    if isinstance(current_products, dict):
+        merged.update(current_products)
+    return merged
 
 
 def normalize_products(raw_products):
@@ -584,10 +602,12 @@ def load_web_store():
         loaded_products = data.get("products", {})
         loaded_inventory = data.get("inventory", {})
 
-        products = normalize_products(loaded_products)
-
-        if not products:
-            products = create_default_products()
+        # 保存済み商品だけでなく、47クラス分の商品候補を常に残す。
+        # これにより、一度config.pyがトマトだけへ書き換えられても、
+        # 商品登録画面では他の商品を引き続き選択できる。
+        products = merge_with_default_product_master(
+            normalize_products(loaded_products)
+        )
 
         inventory = normalize_inventory(loaded_inventory, products)
 
@@ -680,34 +700,44 @@ def load_from_config_py():
         spec.loader.exec_module(config_module)
 
         vegetable_prices = getattr(config_module, "VEGETABLE_PRICES", {})
-        vegetable_weights = getattr(config_module, "VEGETABLE_WEIGHTS", {})
+        vegetable_weights_raw = getattr(config_module, "VEGETABLE_WEIGHTS", {})
         config_sensor_count = getattr(config_module, "WEIGHT_SENSOR_COUNT", 1)
         config_sensor_targets = getattr(config_module, "WEIGHT_SENSOR_TARGETS", {})
 
         if not isinstance(vegetable_prices, dict):
             vegetable_prices = {}
-        if not isinstance(vegetable_weights, dict):
-            vegetable_weights = {}
 
-        products = {}
-
-        if vegetable_prices:
-            for label, price in vegetable_prices.items():
-                label = normalize_label(label)
-                display_name = get_japanese_name(label)
-                weight = int(vegetable_weights.get(label, DEFAULT_WEIGHTS.get(label, 100)))
-                price = int(price)
-                product_id = make_product_id(label, price, weight)
-
-                products[product_id] = {
-                    "display_name": display_name,
-                    "label": label,
-                    "price": price,
-                    "weight": weight,
-                    "active": True
-                }
+        # 旧config.pyではVEGETABLE_WEIGHTSが単一数値のことがある。
+        if isinstance(vegetable_weights_raw, dict):
+            vegetable_weights = vegetable_weights_raw
+            scalar_weight = None
         else:
-            products = create_default_products()
+            vegetable_weights = {}
+            try:
+                scalar_weight = int(vegetable_weights_raw)
+            except Exception:
+                scalar_weight = None
+
+        # config.pyには登録済み商品だけが書かれていても、商品登録候補は47種類残す。
+        products = create_default_products()
+
+        for label, price in vegetable_prices.items():
+            label = normalize_label(label)
+            display_name = get_japanese_name(label)
+            weight = vegetable_weights.get(label)
+            if weight is None:
+                weight = scalar_weight if scalar_weight is not None else DEFAULT_WEIGHTS.get(label, 100)
+            weight = int(weight)
+            price = int(price)
+            product_id = make_product_id(label, price, weight)
+
+            products[product_id] = {
+                "display_name": display_name,
+                "label": label,
+                "price": price,
+                "weight": weight,
+                "active": True
+            }
 
         inventory = {}
 
@@ -1249,6 +1279,11 @@ def add_or_update_product(item_name, item_label, price, count, weight):
     }
 
     inventory[product_id] = count
+
+    # LCD・重量センサーが1台だけの構成では、最初に登録した商品をsensor_1へ
+    # 自動設定する。2件目以降は管理画面で選択中の商品を勝手に変更しない。
+    if not str(weight_sensor_targets.get("sensor_1", "") or "").strip():
+        weight_sensor_targets["sensor_1"] = product_id
 
     save_web_store()
 

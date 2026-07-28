@@ -18,6 +18,20 @@ import os
 import threading
 
 try:
+    from config import (
+        RED_LED_PIN,
+        GREEN_LED_PIN,
+        BUZZER_PIN,
+        CONFIRM_BUTTON_PIN,
+    )
+except Exception:
+    # 単体実行や旧設定との互換用フォールバック
+    RED_LED_PIN = 17
+    GREEN_LED_PIN = 27
+    BUZZER_PIN = 22
+    CONFIRM_BUTTON_PIN = 23
+
+try:
     from gpiozero import LED, Buzzer, Button
 except Exception:
     LED = None
@@ -29,12 +43,6 @@ try:
 except Exception:
     CharLCD = None
 
-
-# BCM番号。配線に合わせて変更してください。
-RED_LED_PIN = 17
-GREEN_LED_PIN = 27
-BUZZER_PIN = 22
-CONFIRM_BUTTON_PIN = 23
 
 # I2C LCDのアドレス。多くは0x27または0x3f。
 # 実機で「sudo i2cdetect -y 1」を実行して確認する。
@@ -114,8 +122,17 @@ def setup_hardware():
     """Flask起動時に1回だけ呼び出す。"""
     global red_led, green_led, buzzer, confirm_button, lcd
 
-    # LED・ブザー・確認ボタン
-    if LED is None or Buzzer is None or Button is None:
+    # LED・ブザー・確認ボタンはcontroller.pyが一括して所有する。
+    # Flaskとcontroller.pyが同じGPIOを同時に開くと競合するため、Web側では
+    # 既定で初期化しない。旧運用へ一時的に戻す場合のみ環境変数を明示する。
+    enable_web_gpio = os.getenv("WEB_ADMIN_ENABLE_GPIO", "0").strip() == "1"
+
+    if not enable_web_gpio:
+        print(
+            "LED・ブザー・確認ボタンはcontroller.py側で制御します。"
+            "Web管理画面ではGPIOを開きません。"
+        )
+    elif LED is None or Buzzer is None or Button is None:
         print(
             "gpiozero が使えないため、"
             "LED・ブザー・確認ボタン制御は無効です。"
@@ -135,13 +152,7 @@ def setup_hardware():
 
             show_idle()
 
-            print("LED・ブザー・確認ボタンを初期化しました。")
-            print(
-                f"赤LED: GPIO{RED_LED_PIN}, "
-                f"緑LED: GPIO{GREEN_LED_PIN}, "
-                f"ブザー: GPIO{BUZZER_PIN}, "
-                f"確認ボタン: GPIO{CONFIRM_BUTTON_PIN}"
-            )
+            print("Web管理画面側でGPIOを初期化しました。")
 
         except Exception as error:
             print(

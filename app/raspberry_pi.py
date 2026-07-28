@@ -39,6 +39,7 @@
 
 import random
 import statistics
+import threading
 import time
 
 # ---- センサー設定 ----
@@ -72,6 +73,7 @@ _hx_coin = None
 _hx_vegetable = None
 _coin_offset = 0.0     # 起動時（無負荷）のraw平均値
 _sensor_available = None  # None=未判定, True=実機, False=ダミー
+_sensor_lock = threading.RLock()
 
 
 def _read_raw_mean(hx, samples: int, fallback: float = 0.0) -> float:
@@ -176,6 +178,41 @@ def _init_sensors() -> bool:
     return True
 
 
+def _ensure_sensor_state() -> bool:
+    """センサー初期化状態を返す。呼び出し元は_sensor_lockを保持すること。"""
+    global _sensor_available
+
+    if _sensor_available is None:
+        _sensor_available = _init_sensors()
+
+    return bool(_sensor_available)
+
+
+def _convert_vegetable_raw_to_grams(vege_raw: float) -> float:
+    total_vege = vege_raw / VEGE_SCALE_RATIO
+    vege_weight = total_vege - TARE_VEGE_PLATFORM
+    if vege_weight < 0.5:
+        vege_weight = 0.0
+    return round(max(vege_weight, 0.0), 1)
+
+
+def get_vegetable_weight():
+    """
+    野菜用ロードセルだけを読み取る。
+
+    来客中のLED更新ではコイン用ロードセルまで毎回読む必要がないため、
+    get_weights()より短時間・低負荷で現在の野菜重量を取得する。
+    """
+    with _sensor_lock:
+        if not _ensure_sensor_state():
+            return float(random.randint(1800, 2000))
+
+        with _realtime_priority():
+            vege_raw = _read_raw_mean(_hx_vegetable, SAMPLES_PER_READ)
+
+        return _convert_vegetable_raw_to_grams(vege_raw)
+
+
 def get_weights():
     """
     ラズパイから重量情報を取得
@@ -185,41 +222,28 @@ def get_weights():
     dict
 
     {
-        "vegetable": 1840,   # 野菜の重量(g)。台の重さは差し引き済み
-        "coinbox": 950       # コインボックスの重量(g)
+        "vegetable": 1840,
+        "coinbox": 950
     }
     """
-    global _sensor_available
+    with _sensor_lock:
+        if not _ensure_sensor_state():
+            return {
+                "vegetable": random.randint(1800, 2000),
+                "coinbox": random.randint(900, 1000),
+            }
 
-    if _sensor_available is None:
-        _sensor_available = _init_sensors()
+        # 読み取りの間だけリアルタイム優先度に昇格する。
+        with _realtime_priority():
+            coin_raw = _read_raw_mean(_hx_coin, SAMPLES_PER_READ)
+            vege_raw = _read_raw_mean(_hx_vegetable, SAMPLES_PER_READ)
 
-    if not _sensor_available:
-        # ===== ダミー実装（PC・センサー未接続時）=====
+        coin_weight = (coin_raw - _coin_offset) / COIN_SCALE_RATIO
+
         return {
-            "vegetable": random.randint(1800, 2000),
-            "coinbox": random.randint(900, 1000),
+            "vegetable": _convert_vegetable_raw_to_grams(vege_raw),
+            "coinbox": round(max(coin_weight, 0.0), 1),
         }
-
-    # 読み取りの間だけリアルタイム優先度に昇格する（60マイクロ秒制約のため）。
-    # 常時昇格するとカメラスレッド等を圧迫するため、この区間に限定する。
-    with _realtime_priority():
-        coin_raw = _read_raw_mean(_hx_coin, SAMPLES_PER_READ)
-        vege_raw = _read_raw_mean(_hx_vegetable, SAMPLES_PER_READ)
-
-    coin_weight = (coin_raw - _coin_offset) / COIN_SCALE_RATIO
-
-    total_vege = vege_raw / VEGE_SCALE_RATIO
-    vege_weight = total_vege - TARE_VEGE_PLATFORM
-    if vege_weight < 0.5:  # わずかなノイズ対策
-        vege_weight = 0.0
-
-    # 負の値はノイズとして0に丸める。
-    # weight.csv に負の値が入ると theft_checker が判定不能(ERROR)になるため必須
-    return {
-        "vegetable": round(max(vege_weight, 0.0), 1),
-        "coinbox": round(max(coin_weight, 0.0), 1),
-    }
 
 
 def cleanup():

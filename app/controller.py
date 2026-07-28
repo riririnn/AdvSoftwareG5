@@ -16,6 +16,7 @@ controller.py
 from pathlib import Path
 from datetime import datetime
 import argparse
+import json
 import threading
 import time
 
@@ -26,6 +27,7 @@ from config import (
     SESSION_DIR,
     PERSON_DISAPPEAR_TIME,
     COIN_DETECT_INTERVAL,
+    PAYMENT_LED_UPDATE_INTERVAL,
     PREDICT_SERVER_URL,
     PERSON_CONF_THRESHOLD,
     COIN_CONF_THRESHOLD,
@@ -40,6 +42,10 @@ from config import (
     VEGETABLE_BEFORE_IMAGE,
     VEGETABLE_AFTER_IMAGE,
     VEGETABLE_NONE_MARKER,
+    SESSION_INFO_FILENAME,
+    TARGET_VEGETABLE,
+    VEGETABLE_PRICES,
+    VEGETABLE_WEIGHTS,
 )
 
 from csv_logger import (
@@ -52,8 +58,16 @@ from csv_logger import (
 )
 
 from recorder import Recorder
-from raspberry_pi import get_weights
+from raspberry_pi import get_weights, get_vegetable_weight
 from launcher import launch
+from payment_indicator import (
+    setup as setup_payment_indicator,
+    show_idle as indicator_show_idle,
+    show_pending as indicator_show_pending,
+    show_paid as indicator_show_paid,
+    show_theft as indicator_show_theft,
+    cleanup as cleanup_payment_indicator,
+)
 
 # ==========================================
 # AI認識（GPUサーバーの /predict を利用）
@@ -391,6 +405,120 @@ def reset_coin_tracking():
 
 
 # ==========================================
+# 来客中のリアルタイム支払い状態
+# ==========================================
+
+
+def _calculate_live_purchase_amount(
+    before_vegetable_weight: float,
+    current_vegetable_weight: float,
+) -> int:
+    """重量減少から、現在支払うべき金額を最終判定と同じ方式で計算する。"""
+    try:
+        unit_weight = float(VEGETABLE_WEIGHTS[TARGET_VEGETABLE])
+        unit_price = int(VEGETABLE_PRICES[TARGET_VEGETABLE])
+    except (KeyError, TypeError, ValueError):
+        return 0
+
+    if unit_weight <= 0 or unit_price < 0:
+        return 0
+
+    decreased_weight = max(
+        0.0,
+        float(before_vegetable_weight) - float(current_vegetable_weight),
+    )
+    estimated_count = max(0, round(decreased_weight / unit_weight))
+    return int(estimated_count * unit_price)
+
+
+class _LivePaymentMonitor:
+    """
+    野菜重量と投入硬貨を監視し、来客中のLEDを赤/緑へ切り替える。
+
+    GPIOはcontroller.py内のpayment_indicatorだけが所有するため、
+    FlaskとのGPIO競合やroot所有の状態ファイルは発生しない。
+    """
+
+    def __init__(self, before_vegetable_weight: float):
+        self.before_vegetable_weight = float(before_vegetable_weight)
+        self._paid_amount = 0
+        self._required_amount = 0
+        self._lock = threading.RLock()
+        self._stop_event = threading.Event()
+        self._thread = threading.Thread(target=self._loop, daemon=True)
+        self._last_error = None
+
+    def start(self):
+        indicator_show_pending(0, 0)
+        self._thread.start()
+
+    def add_coins(self, coins: list[int]):
+        if not coins:
+            return
+
+        with self._lock:
+            self._paid_amount += sum(int(coin) for coin in coins)
+            required = self._required_amount
+            paid = self._paid_amount
+
+        self._apply_indicator(required, paid)
+
+    def _apply_indicator(self, required: int, paid: int):
+        # 商品をまだ取っていない状態(required=0)は、来客中なので赤のままにする。
+        if required > 0 and paid >= required:
+            indicator_show_paid(required, paid)
+        else:
+            indicator_show_pending(required, paid)
+
+    def _loop(self):
+        while not self._stop_event.wait(PAYMENT_LED_UPDATE_INTERVAL):
+            try:
+                current_weight = get_vegetable_weight()
+                required = _calculate_live_purchase_amount(
+                    self.before_vegetable_weight,
+                    current_weight,
+                )
+
+                with self._lock:
+                    self._required_amount = required
+                    paid = self._paid_amount
+
+                self._apply_indicator(required, paid)
+                self._last_error = None
+
+            except Exception as error:
+                message = str(error)
+                if message != self._last_error:
+                    print(
+                        "[Controller] 支払い状態の重量取得に失敗しました。"
+                        f"赤LEDを維持します: {error}"
+                    )
+                    self._last_error = message
+
+    def snapshot(self) -> tuple[int, int]:
+        with self._lock:
+            return self._required_amount, self._paid_amount
+
+    def stop(self):
+        self._stop_event.set()
+        if self._thread.is_alive():
+            self._thread.join(timeout=PAYMENT_LED_UPDATE_INTERVAL + 2.0)
+
+
+def _load_theft_check_result(session_dir: Path) -> dict:
+    """theft_checker実行後のsession.jsonから最終判定を読み取る。"""
+    path = session_dir / SESSION_INFO_FILENAME
+    try:
+        with open(path, "r", encoding="utf-8") as file:
+            session_data = json.load(file)
+        theft_check = session_data.get("theft_check")
+        return theft_check if isinstance(theft_check, dict) else {}
+    except (OSError, json.JSONDecodeError) as error:
+        print(f"[Controller] 最終判定の読み込みに失敗しました: {error}")
+        return {}
+
+
+# ==========================================
 # Controller
 # ==========================================
 
@@ -400,6 +528,7 @@ class Controller:
     def __init__(self):
 
         self.recorder = Recorder()
+        self.payment_monitor = None
 
     def run(self):
 
@@ -407,6 +536,8 @@ class Controller:
         print("Unmanned Sales System")
         print("Waiting for customer...")
         print("===================================")
+
+        indicator_show_idle(reset_buzzer=True)
 
         while True:
 
@@ -419,6 +550,9 @@ class Controller:
                 continue
 
             print("\nCustomer detected.")
+
+            # 人を検知した時点から、支払い完了までは赤LEDを点灯する。
+            indicator_show_pending(0, 0)
 
             # コインの新規投入判定をセッションごとにリセット
             reset_coin_tracking()
@@ -459,21 +593,27 @@ class Controller:
             # 入店時重量取得
             # -----------------------------
 
-            weights = get_weights()
+            before_weights = get_weights()
 
             log_weight(
-                session_dir,                    
+                session_dir,
                 "before",
                 "vegetable",
-                weights["vegetable"],
+                before_weights["vegetable"],
             )
 
             log_weight(
                 session_dir,
                 "before",
                 "coinbox",
-                weights["coinbox"],
+                before_weights["coinbox"],
             )
+
+            # 重量減少と投入硬貨から、来客中のLEDをリアルタイム更新する。
+            self.payment_monitor = _LivePaymentMonitor(
+                before_weights["vegetable"]
+            )
+            self.payment_monitor.start()
 
             # -----------------------------
             # 録画開始
@@ -517,6 +657,9 @@ class Controller:
                 for coin in coins:
                     log_coin(session_dir, coin)
 
+                if self.payment_monitor is not None:
+                    self.payment_monitor.add_coins(coins)
+
                 # -------------------------
                 # 人検知
                 # -------------------------
@@ -540,8 +683,12 @@ class Controller:
                 time.sleep(COIN_DETECT_INTERVAL)
 
             # -----------------------------
-            # 録画終了
+            # リアルタイム支払い監視・録画終了
             # -----------------------------
+
+            if self.payment_monitor is not None:
+                self.payment_monitor.stop()
+                self.payment_monitor = None
 
             self.recorder.stop()
 
@@ -598,6 +745,25 @@ class Controller:
 
             launch(session_dir)
 
+            # 最終判定に合わせてLED・ブザーを確定する。
+            theft_check = _load_theft_check_result(session_dir)
+            judgement = str(theft_check.get("judgement") or "").lower()
+            purchase_amount = int(theft_check.get("purchase_amount") or 0)
+            paid_amount = int(theft_check.get("paid_amount") or 0)
+            shortage = int(theft_check.get("shortage") or 0)
+
+            if judgement in {"normal", "nomal"}:
+                if purchase_amount > 0:
+                    indicator_show_paid(purchase_amount, paid_amount)
+                else:
+                    indicator_show_idle()
+            elif judgement == "theft":
+                indicator_show_theft(shortage)
+            else:
+                # 判定不能時は誤って緑にしない。赤LEDで要確認を示すが、
+                # 万引き確定ではないためブザーは鳴らさない。
+                indicator_show_pending(purchase_amount, paid_amount)
+
             print()
             print("Session finished.")
             print("Waiting for next customer...")
@@ -622,6 +788,7 @@ def main():
     else:
         print(f"[Controller] AIモードで起動します（推論サーバー: {PREDICT_SERVER_URL}）")
 
+    setup_payment_indicator()
     controller = Controller()
 
     try:
@@ -631,8 +798,12 @@ def main():
     finally:
         # セッション中にCtrl+Cされた場合、録画スレッドを止めてから
         # カメラを解放する（順序が逆だと解放済みカメラへ書き込みに行く）
+        if controller.payment_monitor is not None:
+            controller.payment_monitor.stop()
+            controller.payment_monitor = None
         controller.recorder.stop()
         release_cameras()
+        cleanup_payment_indicator()
         try:
             from raspberry_pi import cleanup as cleanup_sensors
             cleanup_sensors()

@@ -383,7 +383,7 @@ def show_product(label, price=0, count=0, weight=0):
     商品情報を電子値札へ表示する。
 
     1行目:
-        1ｺ 商品名
+        商品名 1コ
 
     2行目:
         重量 グラム 価格 エン
@@ -394,8 +394,6 @@ def show_product(label, price=0, count=0, weight=0):
     label_key = str(label or "").strip().lower()
     lcd_name = LCD_KATAKANA_NAMES.get(label_key)
 
-    # 対応表に存在しない商品ラベルは、
-    # 表示可能な英数字としてそのまま使用する。
     if not lcd_name:
         lcd_name = _lcd_text(label_key).strip() or "ｼｮｳﾋﾝ"
 
@@ -414,10 +412,10 @@ def show_product(label, price=0, count=0, weight=0):
     except (TypeError, ValueError):
         weight = 0
 
-    # 例:
-    # 1行目「1ｺ ｱｰﾓﾝﾄﾞ」
-    # 2行目「100ｸﾞﾗﾑ 150ｴﾝ」
-    product_line = f"1ｺ {lcd_name}"
+    # 1行目：商品名の後ろに「1コ」
+    product_line = f"{lcd_name} 1ｺ"
+
+    # 2行目：1個当たりの重量と価格
     detail_line = _format_weight_price_line(
         weight=weight,
         price=price,
@@ -429,7 +427,7 @@ def show_product(label, price=0, count=0, weight=0):
     )
 
     print(
-        f"電子値札表示: 1個 {lcd_name} / "
+        f"電子値札表示: {lcd_name} 1個 / "
         f"{weight}グラム {price}円 "
         f"（登録在庫: {count}個）"
     )

@@ -29,13 +29,13 @@ SESSION_DIR = PROJECT_ROOT / "sessions"
 # 硬貨を検出できない（検出0件。モデルの学習データやC922との画角・焦点距離の
 # 違いが原因と推測）ことを実機テストで確認しているため、コイン・野菜用途には使わない。
 # 監視カメラ
-MONITOR_CAMERA_INDEX = 2
+MONITOR_CAMERA_INDEX = 0
 
 # コインカメラ
-COIN_CAMERA_INDEX = 0
+COIN_CAMERA_INDEX = 2
 
 # 野菜カメラ（コインカメラと共用）
-VEGETABLE_CAMERA_INDEX = 0
+VEGETABLE_CAMERA_INDEX = 2
 
 # 共通設定
 CAMERA_WIDTH = 640
@@ -78,7 +78,7 @@ RECORD_FPS = 3
 
 # GPU推論サーバー（app/web_server.py）のURL。
 # 別マシンで動かす場合はそのIPに変更する（例: "http://192.168.1.10:8080"）
-PREDICT_SERVER_URL = "http://localhost:8080"
+PREDICT_SERVER_URL = "http://100.98.67.33:8080"
 
 # 検出として採用する信頼度の下限（これ未満の検出は無視）
 PERSON_CONF_THRESHOLD = 0.5

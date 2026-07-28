@@ -1,16 +1,15 @@
 """
-LCD電子値札制御。
+LED・ブザー・確認ボタン・LCD電子値札制御
 
 仕様:
-- LCDにはsensor_1に設定された商品情報だけを表示する
-- 1行目: 商品名 1コ
-- 2行目: 1個当たりの重量と価格
-- 支払い待ち、支払い完了、未払い、万引きなどの状態は表示しない
-- LED・ブザー・確認ボタンはapp/payment_indicator.pyを通じて
-  controller.pyだけが制御する
+- normal判定: 緑LED ON、赤LED OFF、ブザー停止
+- theft判定 : 赤LED ON、緑LED OFF、確認ボタンが押されるまでブザー鳴動
+- 確認ボタンを押すと、ブザーだけ停止する
+- LCDには sensor_1 に設定された商品名を半角カタカナで表示する
+- 1行目には「1ｺ 商品名」、2行目には「100ｸﾞﾗﾑ 150ｴﾝ」の形式で表示する
 
 1602 LCDのA00文字マップで表示できるASCIIと半角カタカナだけを送る。
-WindowsやLCD未接続環境ではエラーでWebを停止しない。
+WindowsやGPIO未接続環境ではエラーでWebを止めない。
 """
 
 from pathlib import Path
@@ -19,10 +18,23 @@ import os
 import threading
 
 try:
+    from gpiozero import LED, Buzzer, Button
+except Exception:
+    LED = None
+    Buzzer = None
+    Button = None
+
+try:
     from RPLCD.i2c import CharLCD
 except Exception:
     CharLCD = None
 
+
+# BCM番号。配線に合わせて変更してください。
+RED_LED_PIN = 17
+GREEN_LED_PIN = 27
+BUZZER_PIN = 22
+CONFIRM_BUTTON_PIN = 23
 
 # I2C LCDのアドレス。多くは0x27または0x3f。
 # 実機で「sudo i2cdetect -y 1」を実行して確認する。
@@ -88,6 +100,10 @@ LCD_KATAKANA_NAMES = {
 BASE_DIR = Path(__file__).resolve().parent
 PRODUCT_SETTINGS_PATH = BASE_DIR.parent / "product_settings.py"
 
+red_led = None
+green_led = None
+buzzer = None
+confirm_button = None
 lcd = None
 
 # Web処理などからLCDへ同時に書き込まないようにする。
@@ -95,40 +111,139 @@ _lcd_lock = threading.RLock()
 
 
 def setup_hardware():
-    """Flask起動時にLCDだけを初期化する。"""
-    global lcd
+    """Flask起動時に1回だけ呼び出す。"""
+    global red_led, green_led, buzzer, confirm_button, lcd
 
-    print(
-        "支払い状態はcontroller.py側のLED・ブザーで通知します。"
-        "LCDには商品情報だけを表示します。"
-    )
+    # LED・ブザー・確認ボタン
+    if LED is None or Buzzer is None or Button is None:
+        print(
+            "gpiozero が使えないため、"
+            "LED・ブザー・確認ボタン制御は無効です。"
+        )
+    else:
+        try:
+            red_led = LED(RED_LED_PIN)
+            green_led = LED(GREEN_LED_PIN)
+            buzzer = Buzzer(BUZZER_PIN)
 
+            confirm_button = Button(
+                CONFIRM_BUTTON_PIN,
+                pull_up=True,
+                bounce_time=0.1,
+            )
+            confirm_button.when_pressed = stop_buzzer
+
+            show_idle()
+
+            print("LED・ブザー・確認ボタンを初期化しました。")
+            print(
+                f"赤LED: GPIO{RED_LED_PIN}, "
+                f"緑LED: GPIO{GREEN_LED_PIN}, "
+                f"ブザー: GPIO{BUZZER_PIN}, "
+                f"確認ボタン: GPIO{CONFIRM_BUTTON_PIN}"
+            )
+
+        except Exception as error:
+            print(
+                "LED・ブザー・確認ボタンの初期化に失敗しました:",
+                error,
+            )
+
+            red_led = None
+            green_led = None
+            buzzer = None
+            confirm_button = None
+
+    # 電子値札LCD
     if CharLCD is None:
         print("RPLCD が使えないため、LCD電子値札は無効です。")
-        return
+    else:
+        try:
+            lcd = CharLCD(
+                i2c_expander="PCF8574",
+                address=LCD_ADDRESS,
+                port=1,
+                cols=LCD_COLS,
+                rows=LCD_ROWS,
+                charmap=LCD_CHARMAP,
+
+                # 自動改行と手動のカーソル移動が競合しないようにする。
+                auto_linebreaks=False,
+            )
+
+            lcd.clear()
+
+            print(
+                "LCD電子値札を初期化しました。"
+                f"I2Cアドレス: {hex(LCD_ADDRESS)}, "
+                f"charmap: {LCD_CHARMAP}"
+            )
+
+        except Exception as error:
+            print("LCD電子値札の初期化に失敗しました:", error)
+            lcd = None
+
+
+def show_idle():
+    """待機状態にする。"""
+    if red_led:
+        red_led.off()
+
+    if green_led:
+        green_led.off()
+
+    if buzzer:
+        buzzer.off()
+
+
+def show_paid():
+    """支払い完了時にLEDとブザーだけを制御する。"""
+    if red_led:
+        red_led.off()
+
+    if green_led:
+        green_led.on()
+
+    if buzzer:
+        buzzer.off()
+
+    # LCDは商品名・単重量・価格を表示し続けるため更新しない。
+    print("支払い完了: 緑LED ON、ブザー停止")
+
+
+def show_unpaid(shortage=0):
+    """未払い判定時にLEDとブザーだけを制御する。"""
+    if red_led:
+        red_led.on()
+
+    if green_led:
+        green_led.off()
+
+    if buzzer:
+        buzzer.on()
 
     try:
-        lcd = CharLCD(
-            i2c_expander="PCF8574",
-            address=LCD_ADDRESS,
-            port=1,
-            cols=LCD_COLS,
-            rows=LCD_ROWS,
-            charmap=LCD_CHARMAP,
-            auto_linebreaks=False,
-        )
+        shortage = max(0, int(shortage))
+    except (TypeError, ValueError):
+        shortage = 0
 
-        lcd.clear()
+    # LCDは商品名・単重量・価格を表示し続けるため更新しない。
+    print(
+        f"万引き・未払い判定: 不足金額 {shortage}円。"
+        "確認ボタンでブザー停止。"
+    )
 
-        print(
-            "LCD電子値札を初期化しました。"
-            f"I2Cアドレス: {hex(LCD_ADDRESS)}, "
-            f"charmap: {LCD_CHARMAP}"
-        )
 
-    except Exception as error:
-        print("LCD電子値札の初期化に失敗しました:", error)
-        lcd = None
+def stop_buzzer():
+    """
+    確認ボタン押下時にブザーだけを停止する。
+
+    赤LEDは警告状態として残す。
+    """
+    if buzzer:
+        buzzer.off()
+
+    print("確認ボタンが押されたため、ブザーを停止しました。")
 
 
 def _lcd_text(value):

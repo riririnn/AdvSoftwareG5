@@ -12,6 +12,12 @@ import argparse
 import cv2
 import web_client
 from camera_capture import CameraCapture
+from config import (
+    CAMERA_FPS,
+    CAMERA_HEIGHT,
+    CAMERA_WIDTH,
+    VEGETABLE_CAMERA_INDEX,
+)
 
 
 def check_purchase_or_theft(
@@ -36,7 +42,12 @@ def check_purchase_or_theft(
 
 def main_loop(server_url: str):
     print(f"Unmanned Sales Monitoring System started. Server: {server_url}")
-    cam = CameraCapture(camera_index=0, width=640, height=480, fps=10)
+    cam = CameraCapture(
+        camera_index=VEGETABLE_CAMERA_INDEX,
+        width=CAMERA_WIDTH,
+        height=CAMERA_HEIGHT,
+        fps=CAMERA_FPS,
+    )
 
     def on_frame(frame):
         # フレームをJPEGバイト列に変換してサーバーへ送信

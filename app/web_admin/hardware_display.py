@@ -5,9 +5,10 @@ LED・ブザー・確認ボタン・LCD電子値札制御
 - normal判定: 緑LED ON、赤LED OFF、ブザー停止
 - theft判定 : 赤LED ON、緑LED OFF、確認ボタンが押されるまでブザー鳴動
 - 確認ボタンを押すと、ブザーだけ停止する
-- LCDには sensor_1 に設定された商品の英語ラベル、価格、在庫数、単重量を表示する
+- LCDには sensor_1 に設定された商品名を半角カタカナで表示する
+- 2行目には「1ｺ 100ｸﾞﾗﾑ 150ｴﾝ」の形式で、1個当たりの重量と価格を表示する
 
-1602 LCDは日本語を直接表示できないため、LCDへ送る文字列はASCIIへ制限する。
+1602 LCDのA00文字マップで表示できるASCIIと半角カタカナだけを送る。
 WindowsやGPIO未接続環境ではエラーでWebを止めない。
 """
 
@@ -15,7 +16,6 @@ from pathlib import Path
 import importlib.util
 import os
 import threading
-import unicodedata
 
 try:
     from gpiozero import LED, Buzzer, Button
@@ -42,6 +42,59 @@ LCD_ADDRESS = int(os.getenv("LCD_ADDRESS", "0x3f"), 0)
 LCD_COLS = 16
 LCD_ROWS = 2
 LCD_CHARMAP = os.getenv("LCD_CHARMAP", "A00")
+
+
+# YOLOの商品ラベルから、LCD表示用の半角カタカナへ変換する。
+# 濁点・半濁点はLCD上で1文字分を使用するため、全て16文字以内に収めている。
+LCD_KATAKANA_NAMES = {
+    "almond": "ｱｰﾓﾝﾄﾞ",
+    "apple": "ﾘﾝｺﾞ",
+    "asparagus": "ｱｽﾊﾟﾗｶﾞｽ",
+    "avocado": "ｱﾎﾞｶﾄﾞ",
+    "banana": "ﾊﾞﾅﾅ",
+    "beans": "ﾏﾒ",
+    "beet": "ﾋﾞｰﾂ",
+    "bell pepper": "ﾊﾟﾌﾟﾘｶ",
+    "blackberry": "ﾌﾞﾗｯｸﾍﾞﾘｰ",
+    "blueberry": "ﾌﾞﾙｰﾍﾞﾘｰ",
+    "broccoli": "ﾌﾞﾛｯｺﾘｰ",
+    "brussels sprouts": "ﾒｷｬﾍﾞﾂ",
+    "cabbage": "ｷｬﾍﾞﾂ",
+    "carrot": "ﾆﾝｼﾞﾝ",
+    "cauliflower": "ｶﾘﾌﾗﾜｰ",
+    "celery": "ｾﾛﾘ",
+    "cherry": "ｻｸﾗﾝﾎﾞ",
+    "corn": "ﾄｳﾓﾛｺｼ",
+    "cucumber": "ｷｭｳﾘ",
+    "egg": "ﾀﾏｺﾞ",
+    "eggplant": "ﾅｽ",
+    "garlic": "ﾆﾝﾆｸ",
+    "grape": "ﾌﾞﾄﾞｳ",
+    "green bean": "ｲﾝｹﾞﾝ",
+    "green onion": "ﾈｷﾞ",
+    "hot pepper": "ﾄｳｶﾞﾗｼ",
+    "kiwi": "ｷｳｲ",
+    "lemon": "ﾚﾓﾝ",
+    "lettuce": "ﾚﾀｽ",
+    "lime": "ﾗｲﾑ",
+    "mandarin": "ﾐｶﾝ",
+    "mushroom": "ｷﾉｺ",
+    "onion": "ﾀﾏﾈｷﾞ",
+    "orange": "ｵﾚﾝｼﾞ",
+    "pattypan squash": "ﾊﾟﾃｨﾊﾟﾝｶﾎﾞﾁｬ",
+    "pea": "ｴﾝﾄﾞｳﾏﾒ",
+    "peach": "ﾓﾓ",
+    "pear": "ﾅｼ",
+    "pineapple": "ﾊﾟｲﾅｯﾌﾟﾙ",
+    "potato": "ｼﾞｬｶﾞｲﾓ",
+    "pumpkin": "ｶﾎﾞﾁｬ",
+    "radish": "ﾗﾃﾞｨｯｼｭ",
+    "raspberry": "ﾗｽﾞﾍﾞﾘｰ",
+    "strawberry": "ｲﾁｺﾞ",
+    "tomato": "ﾄﾏﾄ",
+    "vegetable marrow": "ﾍﾞｼﾞﾀﾌﾞﾙﾏﾛｰ",
+    "watermelon": "ｽｲｶ",
+}
 
 BASE_DIR = Path(__file__).resolve().parent
 APP_CONFIG_PATH = BASE_DIR.parent / "config.py"
@@ -157,20 +210,58 @@ def stop_buzzer():
     print("確認ボタンが押されたため、ブザーを停止しました。")
 
 
-def _ascii_text(value):
+def _lcd_text(value):
     """
-    LCDへ送れるASCII文字列へ変換する。
+    LCDへ送信できる文字だけを残す。
 
-    日本語や全角記号が誤って渡っても、LCDコントローラへUTF-8の複数バイトを
-    送らないようにする。英数字・半角記号以外は安全な '?' に置き換える。
+    使用を許可する文字:
+    - ASCIIの表示可能文字
+    - Unicodeの半角カタカナ（U+FF61～U+FF9F）
+
+    それ以外のひらがな・漢字・全角カタカナなどは「?」へ置き換える。
+    半角カタカナを全角へ変換してしまうため、NFKC正規化は行わない。
     """
-    text = unicodedata.normalize("NFKC", str(value or ""))
-    return text.encode("ascii", errors="replace").decode("ascii")
+    text = str(value or "")
+    result = []
+
+    for character in text:
+        code_point = ord(character)
+
+        if 0x20 <= code_point <= 0x7E:
+            result.append(character)
+        elif 0xFF61 <= code_point <= 0xFF9F:
+            result.append(character)
+        elif character in "\r\n\t":
+            result.append(" ")
+        else:
+            result.append("?")
+
+    return "".join(result)
 
 
 def _fit_lcd_line(value):
-    """16文字に切り詰め、残りを空白で埋める。"""
-    return _ascii_text(value)[:LCD_COLS].ljust(LCD_COLS)
+    """LCDの1行を16文字に切り詰め、残りを空白で埋める。"""
+    return _lcd_text(value)[:LCD_COLS].ljust(LCD_COLS)
+
+
+def _format_unit_price_line(weight, price):
+    """
+    1個当たりの重量と価格をLCDの2行目用に整形する。
+
+    標準表示例: 「1ｺ 100ｸﾞﾗﾑ 150ｴﾝ」
+    16文字を超える場合は、末尾の単位が欠けないよう段階的に短縮する。
+    """
+    candidates = [
+        f"1ｺ {weight}ｸﾞﾗﾑ {price}ｴﾝ",
+        f"1ｺ {weight}g {price}ｴﾝ",
+        f"{weight}g {price}ｴﾝ",
+    ]
+
+    for candidate in candidates:
+        if len(candidate) <= LCD_COLS:
+            return candidate
+
+    return candidates[-1][:LCD_COLS]
 
 
 def write_lcd(line1, line2=""):
@@ -199,13 +290,22 @@ def write_lcd(line1, line2=""):
 
 def show_no_product():
     """sensor_1に商品が設定されていないときの表示。"""
-    write_lcd("No Product", "Set sensor_1")
+    write_lcd("ｼｮｳﾋﾝ ﾅｼ", "ｾﾝｻｰ ﾐｾｯﾃｲ")
     print("電子値札: sensor_1の商品が未設定です。")
 
 
 def show_product(label, price=0, count=0, weight=0):
-    """商品情報を電子値札へ表示する。"""
-    label = _ascii_text(label).strip() or "Product"
+    """
+    商品情報を電子値札へ表示する。
+
+    在庫数はWeb管理画面で管理し、電子値札には1個当たりの重量と価格を表示する。
+    """
+    label_key = str(label or "").strip().lower()
+    lcd_name = LCD_KATAKANA_NAMES.get(label_key)
+
+    # 未登録ラベルは英数字のラベルをそのまま使用する。
+    if not lcd_name:
+        lcd_name = _lcd_text(label_key).strip() or "ｼｮｳﾋﾝ"
 
     try:
         price = max(0, int(price))
@@ -222,9 +322,13 @@ def show_product(label, price=0, count=0, weight=0):
     except Exception:
         weight = 0
 
-    # 例: 1行目 "tomato"、2行目 "150Y 10pc 100g"
-    write_lcd(label, f"{price}Y {count}pc {weight}g")
-    print(f"電子値札表示: {label} {price}円 在庫{count}個 {weight}g")
+    # 例: 1行目「ｱｰﾓﾝﾄﾞ」、2行目「1ｺ 100ｸﾞﾗﾑ 150ｴﾝ」
+    detail_line = _format_unit_price_line(weight, price)
+    write_lcd(lcd_name, detail_line)
+    print(
+        f"電子値札表示: {lcd_name} / "
+        f"1個 {weight}グラム {price}円（登録在庫: {count}個）"
+    )
 
 
 def show_current_product_from_store():
@@ -307,6 +411,6 @@ def show_current_product_from_config():
     except Exception:
         weight = 0
 
-    # config.pyには在庫数がないため、起動直後だけ0個として表示する。
+    # config.pyには在庫数がないため、互換性維持のためcount=0を渡す。LCDには在庫数を表示しない。
     show_product(target_label, price=price, count=0, weight=weight)
     return True

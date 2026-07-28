@@ -115,6 +115,15 @@ class Recorder:
     def stop(self):
         """
         録画終了（二重呼び出し・未開始での呼び出しも安全）
+
+        スレッドが実際に終了して writer.release()（moov atom書き込み）を
+        完了するまで待ってから self.writer を片付ける。以前は
+        join(timeout=2) でタイムアウトした場合でもここで self.writer を
+        None にしていたため、負荷等でスレッドの1周期が2秒を超えると、
+        スレッド側が遅れて release() を呼ぼうとした時には既に None に
+        なっていて失敗し、moov atomが書き込まれず動画が壊れる不具合が
+        あった（実機で発生確認済み）。タイムアウトを設けず、スレッドの
+        終了を待ち切ることでこれを防ぐ。
         """
 
         if not self.is_recording:
@@ -122,7 +131,7 @@ class Recorder:
 
         self.is_recording = False  # スレッドがこれを見てreleaseして終わる
         if self._thread is not None:
-            self._thread.join(timeout=2)
+            self._thread.join()
         self._thread = None
         self.writer = None
         self._frame_source = None

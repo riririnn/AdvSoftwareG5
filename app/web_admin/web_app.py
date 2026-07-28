@@ -854,7 +854,23 @@ def add_notification_records_from_session(notification_type, decreased_items, am
 # session.json処理本体
 # =========================================================
 
-def process_session_path(session_path, ignore_stability=False, force_reprocess=False):
+def process_session_path(session_path, ignore_stability=False, force_reprocess=False, apply_hardware=True):
+    """
+    apply_hardware : bool
+        True の場合のみ show_paid()/show_unpaid() を直接呼ぶ。
+
+        実際の来客セッション（controller.py 経由）は、セッション終了直後に
+        payment_state.json 経由でリアルタイムにLED/ブザーが反映済み
+        （watch_payment_state_loop, 0.2秒間隔）。5秒間隔の自動巡回
+        （watch_sessions_loop → scan_sessions_once）がここで同じ判定を
+        再度ハードウェアへ反映すると、次の来客が5秒以内に発生した場合に
+        前の客の判定（ブザー等）が新しい客のセッション中に遅れて発火する
+        競合が起きるため、自動巡回からは apply_hardware=False で呼ぶ。
+
+        Web管理画面の「テスト用セッション生成」「個別インポート」は
+        payment_state.json の更新を伴わないため、apply_hardware=True
+        （デフォルト）のままハードウェアへ直接反映する。
+    """
     session_path = Path(session_path)
 
     if not session_path.exists():
@@ -943,7 +959,10 @@ def process_session_path(session_path, ignore_stability=False, force_reprocess=F
 
     if judgement == "normal":
         # 支払い完了判定の瞬間に緑LEDを点灯し、ブザーを停止する
-        show_paid()
+        # （実来客セッションは payment_state.json 経由で既に反映済みのため、
+        #  自動巡回からの二重発火を避ける）
+        if apply_hardware:
+            show_paid()
 
         inventory_result = update_inventory_from_session(decreased_items)
 
@@ -970,7 +989,10 @@ def process_session_path(session_path, ignore_stability=False, force_reprocess=F
 
     elif judgement == "theft":
         # 万引き・未払い判定の瞬間に赤LEDを点灯し、確認ボタンが押されるまでブザーを鳴らす
-        show_unpaid(shortage)
+        # （実来客セッションは payment_state.json 経由で既に反映済みのため、
+        #  自動巡回からの二重発火を避ける）
+        if apply_hardware:
+            show_unpaid(shortage)
 
         inventory_result = update_inventory_from_session(decreased_items)
 
@@ -1060,11 +1082,11 @@ def process_session_path(session_path, ignore_stability=False, force_reprocess=F
     }
 
 
-def scan_sessions_once():
+def scan_sessions_once(apply_hardware=True):
     results = []
 
     for session_path in find_all_session_jsons():
-        results.append(process_session_path(session_path))
+        results.append(process_session_path(session_path, apply_hardware=apply_hardware))
 
     return results
 
@@ -1233,7 +1255,9 @@ def watch_sessions_loop():
 
     while True:
         try:
-            results = scan_sessions_once()
+            # 実来客セッションのLED/ブザーは payment_state.json 経由で
+            # 既にリアルタイム反映済みのため、ここでは二重発火させない
+            results = scan_sessions_once(apply_hardware=False)
 
             for result in results:
                 if result.get("status") == "success":

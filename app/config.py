@@ -29,13 +29,13 @@ SESSION_DIR = PROJECT_ROOT / "sessions"
 # 硬貨を検出できない（検出0件。モデルの学習データやC922との画角・焦点距離の
 # 違いが原因と推測）ことを実機テストで確認しているため、コイン・野菜用途には使わない。
 # 監視カメラ
-MONITOR_CAMERA_INDEX = 0
+MONITOR_CAMERA_INDEX = 2
 
 # コインカメラ
-COIN_CAMERA_INDEX = 2
+COIN_CAMERA_INDEX = 0
 
 # 野菜カメラ（コインカメラと共用）
-VEGETABLE_CAMERA_INDEX = 2
+VEGETABLE_CAMERA_INDEX = 0
 
 # 共通設定
 CAMERA_WIDTH = 640

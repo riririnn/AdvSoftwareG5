@@ -357,13 +357,13 @@ def write_lcd(line1, line2=""):
 
 
 def show_no_product():
-    """sensor_1に商品が設定されていない場合の表示。"""
+    """商品が設定されていない場合は、その状態だけを表示する。"""
     write_lcd(
-        "ｼｮｳﾋﾝ ﾅｼ",
-        "ｾﾝｻｰ ﾐｾｯﾃｲ",
+        "ｼｮｳﾋﾝ ﾐｾｯﾃｲ",
+        "",
     )
 
-    print("電子値札: sensor_1の商品が未設定です。")
+    print("電子値札: 商品未設定")
 
 
 def show_product(label, price=0, count=0, weight=0):

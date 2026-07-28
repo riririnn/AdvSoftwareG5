@@ -21,21 +21,25 @@ SESSION_DIR = PROJECT_ROOT / "sessions"
 # カメラ設定
 # ==========================================
 
-# カメラ2台構成: 監視=UVC Camera(video0) / コイン・野菜=C922(video2, 共用)
+# カメラ3台構成:
+#   監視  = UVC Camera(046d:0821, video4)
+#   コイン = C922 Pro Stream Webcam(video2)
+#   野菜  = UVC Camera(046d:081b, Logicool C310, video0)
 # ※ USBカメラは1台につき2つのデバイス番号を占有し、偶数番のみ撮影可能。
-#   実機の番号は `v4l2-ctl --list-devices` で確認する（結合テスト機は 0 と 2）。
+#   実機の番号は `v4l2-ctl --list-devices` で確認する。
 #
-# コイン・野菜カメラはC922(Pro Stream Webcam)を使うこと。C310は認識モデルが
-# 硬貨を検出できない（検出0件。モデルの学習データやC922との画角・焦点距離の
-# 違いが原因と推測）ことを実機テストで確認しているため、コイン・野菜用途には使わない。
+# コインカメラは必ずC922を使うこと。C310は認識モデルが硬貨を検出できない
+# （検出0件。モデルの学習データやC922との画角・焦点距離の違いが原因と推測）
+# ことを実機テストで確認している。一方、野菜(vegetable)の検出はC310でも
+# 問題なく機能することを確認済みのため、野菜カメラにはC310を使っている。
 # 監視カメラ
-MONITOR_CAMERA_INDEX = 0
+MONITOR_CAMERA_INDEX = 4
 
 # コインカメラ
 COIN_CAMERA_INDEX = 2
 
-# 野菜カメラ（コインカメラと共用）
-VEGETABLE_CAMERA_INDEX = 2
+# 野菜カメラ（コインカメラとは別、C310を単独使用）
+VEGETABLE_CAMERA_INDEX = 0
 
 # 共通設定
 CAMERA_WIDTH = 640

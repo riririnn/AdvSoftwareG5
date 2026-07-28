@@ -77,6 +77,7 @@ from config import (
     COIN_WEIGHT_MARGIN,
     COIN_LOG_FILENAME,
     VEGETABLE_LOG_FILENAME,
+    VEGETABLE_NONE_MARKER,
     WEIGHT_LOG_FILENAME,
     SESSION_INFO_FILENAME,
 )
@@ -208,12 +209,18 @@ def _load_vegetable_counts(session_dir: Path):
     最後に記録された値を採用する（最新の個数を正とする）。
     この個数は今回の判定には使用せず、参考情報として
     decreased_vegetables_yolo に出力するためだけに用いる。
+
+    検出0件のフェーズは VEGETABLE_NONE_MARKER 行として記録されている
+    （controller.py参照）。マーカー行は「計測は実施した」ことの証明として
+    扱い、counts には含めない。これにより「全品持ち去りで0個」と
+    「データ欠損」を区別できる。
     """
 
     counts = {
         "before": {},
         "after": {},
     }
+    phases_seen = set()
 
     path = session_dir / VEGETABLE_LOG_FILENAME
 
@@ -262,9 +269,15 @@ def _load_vegetable_counts(session_dir: Path):
                 # before/after 以外の想定外フェーズは無視
                 continue
 
+            phases_seen.add(phase)
+
+            if vegetable == VEGETABLE_NONE_MARKER:
+                # 「検出0件だが計測は実施した」マーカー。counts には含めない
+                continue
+
             counts[phase][vegetable] = count
 
-    if not counts["before"] or not counts["after"]:
+    if "before" not in phases_seen or "after" not in phases_seen:
         raise CsvValidationError(
             f"{VEGETABLE_LOG_FILENAME} に before/after 両方のデータが"
             f"揃っていません"

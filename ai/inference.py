@@ -36,7 +36,9 @@ from pathlib import Path
 from ultralytics import YOLO
 
 DEFAULT_WEIGHTS = Path(__file__).parent / "runs" / "vegetables_v1" / "weights" / "best.pt"
-PERSON_WEIGHTS = "yolov8s.pt"  # COCO事前学習済み（初回実行時に自動ダウンロード）
+# COCO事前学習済み。リポジトリに同梱してあるためオフライン（ラズパイ/コンテナ）でも動く。
+# 万一ファイルが無い場合はネットから自動DLされる（ネット環境が必要）。
+PERSON_WEIGHTS = Path(__file__).parent / "weights" / "yolov8s.pt"
 PERSON_CLASS_ID = 0            # COCOの person クラス
 DEFAULT_CONF = 0.25
 DEFAULT_IMGSZ = 640
@@ -51,9 +53,9 @@ def load_model(weights: Path = DEFAULT_WEIGHTS) -> YOLO:
     return YOLO(str(weights))
 
 
-def load_person_model(weights: str = PERSON_WEIGHTS) -> YOLO:
+def load_person_model(weights: Path = PERSON_WEIGHTS) -> YOLO:
     """人間検出用のCOCO事前学習済みモデルをロードする（学習不要）。"""
-    return YOLO(weights)
+    return YOLO(str(weights))
 
 
 def predict(model: YOLO, source, conf: float = DEFAULT_CONF) -> dict:

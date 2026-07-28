@@ -21,7 +21,16 @@
                 <button class="nav-item active" data-page="home">⌂<span>ホーム</span></button>
                 <button class="nav-item" data-page="inventory">□<span>在庫</span></button>
                 <button class="nav-item" data-page="notifications">♢<span>通知</span></button>
+                <button class="nav-item" data-page="settings">⚙<span>設定</span></button>
             </nav>
+
+            <div class="user-area">
+                <div class="shop-pill">
+                    <strong>{{ current_user.shop_name }}</strong>
+                    <small>{{ current_user.email }}</small>
+                </div>
+                <a class="logout-button" href="{{ url_for('logout') }}">ログアウト</a>
+            </div>
 
             <button class="header-notification" type="button" data-page="notifications" aria-label="通知を開く">
                 🔔<span id="headerNotifyBadge" class="badge hidden">0</span>
@@ -33,6 +42,13 @@
                 <div class="mobile-page-title">
                     <span class="section-icon">▮</span>
                     <h2>ホーム</h2>
+                </div>
+                <div class="shop-title-card">
+                    <div>
+                        <p>現在の販売所</p>
+                        <h2>{{ current_user.shop_name }}</h2>
+                    </div>
+                    <span>{{ current_user.manager_name }} さん</span>
                 </div>
 
                 <div class="summary-grid">
@@ -88,8 +104,8 @@
                                 </select>
                                 <button class="action-tile" type="button" onclick="generateAndImportSession()">
                                     <span class="tile-icon">⚙</span>
-                                    <strong>session生成・取込</strong>
-                                    <small>新しいsessionを作成します</small>
+                                    <strong>session生成・通知送信</strong>
+                                    <small>新しいsessionを作成し、履歴反映とメール送信を行います</small>
                                 </button>
                             </div>
                         </div>
@@ -219,12 +235,66 @@
                     <div id="notificationList" class="notification-list"></div>
                 </section>
             </section>
+
+
+            <section id="page-settings" class="page">
+                <div class="page-heading">
+                    <span class="section-icon">⚙</span>
+                    <h2>設定</h2>
+                </div>
+
+                <div class="settings-layout">
+                    <section class="card settings-card">
+                        <div class="card-header">
+                            <div>
+                                <span class="section-icon">＋</span>
+                                <h2>メール通知先登録</h2>
+                            </div>
+                        </div>
+
+                        <form id="lineRecipientForm" class="product-form recipient-form">
+                            <div class="recipient-field-grid">
+                                <label>
+                                    通知先名
+                                    <input id="lineRecipientName" type="text" placeholder="例）農家A" required />
+                                </label>
+                                <label>
+                                    メールアドレス
+                                    <input id="lineEmail" type="email" placeholder="例）example@gmail.com" required />
+                                </label>
+                            </div>
+
+                            <div class="notice-check-grid compact">
+                                <label class="checkbox-line"><input id="noticeEnabled" type="checkbox" checked />この通知先を有効にする</label>
+                                <label class="checkbox-line"><input id="purchaseNotice" type="checkbox" checked />購入通知を送る</label>
+                                <label class="checkbox-line"><input id="theftNotice" type="checkbox" checked />万引き通知を送る</label>
+                                <label class="checkbox-line"><input id="videoNotice" type="checkbox" checked />動画通知を送る</label>
+                                <label class="checkbox-line"><input id="systemNotice" type="checkbox" checked />システム通知を送る</label>
+                            </div>
+
+                            <button class="primary-button" type="submit">通知先を保存</button>
+                        </form>
+                    </section>
+
+                    <section class="card settings-card recipient-list-card">
+                        <div class="card-header">
+                            <div>
+                                <span class="section-icon">👤</span>
+                                <h2>登録済み通知先</h2>
+                            </div>
+                        </div>
+                        <div id="lineRecipientList" class="recipient-list"></div>
+                    </section>
+                </div>
+            </section>
+
         </main>
 
         <nav class="bottom-nav" aria-label="スマートフォン用メニュー">
             <button class="bottom-item active" data-page="home">⌂<span>ホーム</span></button>
             <button class="bottom-item" data-page="inventory">□<span>在庫</span></button>
             <button class="bottom-item" data-page="notifications">🔔<span>通知</span><span id="bottomNotifyBadge" class="badge hidden">0</span></button>
+            <button class="bottom-item" data-page="settings">⚙<span>設定</span></button>
         </nav>
     </div>
 
@@ -275,6 +345,7 @@ const state = {
     sales: [],
     notifications: [],
     weightSensors: { weight_sensor_count: 1, weight_sensor_targets: {} },
+    lineSettings: { line_enabled: true, recipients: [] },
     notificationFilter: 'all'
 };
 
@@ -322,19 +393,14 @@ async function apiJson(url, options = {}) {
 
 async function refreshAll(options = {}) {
     try {
-        const [products, inventory, sales, notifications, weightSensors] = await Promise.all([
-            apiJson('/api/products'),
-            apiJson('/api/inventory'),
-            apiJson('/api/sales'),
-            apiJson('/api/notifications'),
-            apiJson('/api/weight_sensors')
-        ]);
+        const data = await apiJson('/api/dashboard_data');
 
-        state.products = products || {};
-        state.inventory = inventory || {};
-        state.sales = sales || [];
-        state.notifications = notifications || [];
-        state.weightSensors = weightSensors.settings || { weight_sensor_count: 1, weight_sensor_targets: {} };
+        state.products = data.products || {};
+        state.inventory = data.inventory || {};
+        state.sales = data.sales || [];
+        state.notifications = data.notifications || [];
+        state.weightSensors = data.weightSensors || { weight_sensor_count: 1, weight_sensor_targets: {} };
+        state.lineSettings = data.lineSettings || { line_enabled: true, recipients: [] };
 
         renderAll();
         if (options.toast) showToast('最新の情報に更新しました。');
@@ -350,6 +416,7 @@ function renderAll() {
     renderInventory();
     renderWeightSensors();
     renderNotifications();
+    renderLineSettings();
 }
 
 function renderProductSelect() {
@@ -668,7 +735,59 @@ async function generateAndImportSession() {
             body: JSON.stringify({ judgement })
         });
         await refreshAll();
-        showToast(result.message || 'session.jsonを生成して取り込みました。');
+        showToast(result.message || 'session.jsonを生成し、メール通知を送信しました。');
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
+}
+
+
+function renderLineSettings() {
+    const list = document.getElementById('lineRecipientList');
+
+    if (!list) return;
+
+    const settings = state.lineSettings || { line_enabled: true, recipients: [] };
+    const recipients = Array.isArray(settings.recipients) ? settings.recipients : [];
+
+    list.innerHTML = recipients.length ? recipients.map(recipient => `
+        <article class="recipient-row">
+            <div>
+                <strong>${escapeHtml(recipient.name || '通知先')}</strong>
+                <small>${escapeHtml(maskEmail(recipient.email || ''))}</small>
+            </div>
+            <div class="recipient-flags">
+                ${recipient.enabled ? '<span class="type-badge green">有効</span>' : '<span class="type-badge">無効</span>'}
+                ${recipient.purchase_notice ? '<span class="type-badge blue">購入</span>' : ''}
+                ${recipient.theft_notice ? '<span class="type-badge orange">万引き</span>' : ''}
+                ${recipient.video_notice ? '<span class="type-badge green">動画</span>' : ''}
+            </div>
+            <button class="outline-red" type="button" onclick="deleteLineRecipient('${escapeAttr(recipient.email)}')">削除</button>
+        </article>
+    `).join('') : emptyHtml('通知先が登録されていません。');
+}
+
+function maskEmail(email) {
+    const text = String(email || '');
+    const parts = text.split('@');
+    if (parts.length !== 2) return text;
+    const name = parts[0];
+    const domain = parts[1];
+    const maskedName = name.length <= 3 ? name : `${name.slice(0, 3)}...`;
+    return `${maskedName}@${domain}`;
+}
+
+async function deleteLineRecipient(userId) {
+    if (!confirm('この通知先を削除しますか？')) return;
+
+    try {
+        const result = await apiJson('/api/line_recipients/delete', {
+            method: 'POST',
+            body: JSON.stringify({ email: userId })
+        });
+        state.lineSettings = result.settings || state.lineSettings;
+        renderLineSettings();
+        showToast(result.message || 'メール通知先を削除しました。');
     } catch (error) {
         showToast(error.message, 'error');
     }
@@ -697,6 +816,39 @@ document.getElementById('productForm').addEventListener('submit', async (event) 
         document.getElementById('productForm').reset();
         await refreshAll();
         showToast(result.message || '商品を登録しました。');
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
+});
+
+
+document.getElementById('lineRecipientForm').addEventListener('submit', async (event) => {
+    event.preventDefault();
+
+    const payload = {
+        name: document.getElementById('lineRecipientName').value,
+        email: document.getElementById('lineEmail').value,
+        enabled: document.getElementById('noticeEnabled').checked,
+        purchase_notice: document.getElementById('purchaseNotice').checked,
+        theft_notice: document.getElementById('theftNotice').checked,
+        system_notice: document.getElementById('systemNotice').checked,
+        video_notice: document.getElementById('videoNotice').checked
+    };
+
+    try {
+        const result = await apiJson('/api/line_recipients', {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+        document.getElementById('lineRecipientForm').reset();
+        document.getElementById('noticeEnabled').checked = true;
+        document.getElementById('purchaseNotice').checked = true;
+        document.getElementById('theftNotice').checked = true;
+        document.getElementById('videoNotice').checked = true;
+        document.getElementById('systemNotice').checked = true;
+        state.lineSettings = result.settings || state.lineSettings;
+        renderLineSettings();
+        showToast(result.message || 'メール通知先を保存しました。');
     } catch (error) {
         showToast(error.message, 'error');
     }

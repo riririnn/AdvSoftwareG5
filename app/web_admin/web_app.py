@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, send_from_directory
+from flask import Flask, render_template, request, jsonify, send_from_directory, session, redirect, url_for
 from pathlib import Path
 from urllib.parse import quote
 import json
@@ -6,6 +6,9 @@ import os
 import shutil
 import threading
 import time
+import hashlib
+import uuid
+from functools import wraps
 from datetime import datetime
 
 try:
@@ -32,7 +35,14 @@ try:
         set_weight_sensor_count,
         set_weight_sensor_target,
         delete_weight_sensor,
+        get_line_settings,
+        set_line_enabled,
+        save_line_recipient,
+        delete_line_recipient,
         replace_histories_from_sessions,
+        load_web_store,
+        set_current_shop_id,
+        save_web_store,
     )
     from .line_notify import send_line_message, send_line_video_message
 except ImportError:
@@ -54,12 +64,60 @@ except ImportError:
         set_weight_sensor_count,
         set_weight_sensor_target,
         delete_weight_sensor,
+        get_line_settings,
+        set_line_enabled,
+        save_line_recipient,
+        delete_line_recipient,
         replace_histories_from_sessions,
+        load_web_store,
+        set_current_shop_id,
+        save_web_store,
     )
     from line_notify import send_line_message, send_line_video_message
 
+try:
+    from .hardware_display import (
+        setup_hardware,
+        show_paid,
+        show_unpaid,
+        show_current_product_from_config,
+        show_current_product_from_store,
+        stop_buzzer,
+    )
+except ImportError:
+    try:
+        from hardware_display import (
+            setup_hardware,
+            show_paid,
+            show_unpaid,
+            show_current_product_from_config,
+            show_current_product_from_store,
+            stop_buzzer,
+        )
+    except Exception as error:
+        print("hardware_display.py を読み込めませんでした:", error)
+
+        def setup_hardware():
+            pass
+
+        def show_paid():
+            pass
+
+        def show_unpaid(shortage=0):
+            pass
+
+        def show_current_product_from_config():
+            pass
+
+        def show_current_product_from_store():
+            pass
+
+        def stop_buzzer():
+            pass
+
 
 app = Flask(__name__)
+app.secret_key = os.getenv("FLASK_SECRET_KEY", "mujin-demo-secret-key-change-me")
 
 BASE_DIR = Path(__file__).resolve().parent
 # app/web_admin/web_app.py から見たプロジェクトルート
@@ -68,20 +126,174 @@ PROJECT_ROOT = BASE_DIR.parent.parent
 # 別の場所を見る場合は環境変数 SESSIONS_DIR で上書きする。
 SESSIONS_DIR = Path(os.getenv("SESSIONS_DIR", str(PROJECT_ROOT / "sessions")))
 SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
+# ログイン情報などの実行時データはGit管理外のruntimeへ保存する。
+RUNTIME_DIR = PROJECT_ROOT / "runtime"
+RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
 
 PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").rstrip("/")
 LINE_VIDEO_PREVIEW_URL = os.getenv("LINE_VIDEO_PREVIEW_URL", "").strip()
 
 WATCH_INTERVAL_SEC = float(os.getenv("WATCH_INTERVAL_SEC", "5"))
 FILE_STABLE_SEC = float(os.getenv("FILE_STABLE_SEC", "2"))
-RUNTIME_DIR = PROJECT_ROOT / "runtime"
-RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
 PROCESSED_SESSIONS_FILE = RUNTIME_DIR / "processed_sessions.json"
 
 # sessionフォルダに必ず入れるデフォルト動画
 # 例: /home/pi/mujin_web/monitor.mp4 を置くと、各sessionフォルダにコピーして使う
 TEST_VIDEO_SOURCE = Path(os.getenv("TEST_VIDEO_SOURCE", str(RUNTIME_DIR / "monitor.mp4")))
 TEST_PREVIEW_SOURCE = Path(os.getenv("TEST_PREVIEW_SOURCE", str(RUNTIME_DIR / "monitor_preview.jpg")))
+
+# =========================================================
+# 複数販売所向け：初回登録・ログイン管理
+# =========================================================
+USERS_FILE = RUNTIME_DIR / "users.json"
+
+
+def load_users():
+    if not USERS_FILE.exists():
+        return {"users": {}}
+    try:
+        with open(USERS_FILE, "r", encoding="utf-8") as f:
+            data = json.load(f)
+        if not isinstance(data, dict):
+            return {"users": {}}
+        data.setdefault("users", {})
+        return data
+    except Exception as error:
+        print("users.json の読み込みに失敗しました:", error)
+        return {"users": {}}
+
+
+def save_users(data):
+    with open(USERS_FILE, "w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=4)
+
+
+def hash_password(password, salt=None):
+    salt = salt or uuid.uuid4().hex
+    digest = hashlib.sha256((salt + str(password)).encode("utf-8")).hexdigest()
+    return f"{salt}${digest}"
+
+
+def verify_password(password, stored_hash):
+    try:
+        salt, digest = str(stored_hash).split("$", 1)
+    except ValueError:
+        return False
+    return hash_password(password, salt) == stored_hash
+
+
+def is_logged_in():
+    return bool(session.get("shop_id") and session.get("user_email"))
+
+
+def current_user_context():
+    return {
+        "email": session.get("user_email", ""),
+        "manager_name": session.get("manager_name", ""),
+        "shop_id": session.get("shop_id", ""),
+        "shop_name": session.get("shop_name", ""),
+    }
+
+
+@app.before_request
+def prepare_shop_context():
+    allowed_endpoints = {"login", "register", "static"}
+    if request.endpoint in allowed_endpoints:
+        return None
+
+    if not is_logged_in():
+        if request.path.startswith("/api/"):
+            return jsonify({
+                "status": "error",
+                "message": "ログインが必要です。"
+            }), 401
+        return redirect(url_for("login"))
+
+    set_current_shop_id(session.get("shop_id"))
+    load_web_store()
+    return None
+
+
+@app.route("/register", methods=["GET", "POST"])
+def register():
+    if request.method == "GET":
+        return render_template("register.html")
+
+    shop_name = str(request.form.get("shop_name", "") or "").strip()
+    manager_name = str(request.form.get("manager_name", "") or "").strip()
+    email = str(request.form.get("email", "") or "").strip().lower()
+    password = str(request.form.get("password", "") or "")
+
+    if not shop_name or not manager_name or not email or not password:
+        return render_template("register.html", error="販売所名、管理者名、メールアドレス、パスワードを入力してください。")
+
+    users_data = load_users()
+    if email in users_data.get("users", {}):
+        return render_template("register.html", error="このメールアドレスはすでに登録されています。")
+
+    shop_id = f"shop_{uuid.uuid4().hex[:10]}"
+    users_data["users"][email] = {
+        "email": email,
+        "password_hash": hash_password(password),
+        "manager_name": manager_name,
+        "shop_name": shop_name,
+        "shop_id": shop_id,
+        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+    }
+    save_users(users_data)
+
+    # 新規販売所用のデータファイルを作成する。
+    # 初回登録で入力したログイン用メールアドレスを、そのまま初期通知先として自動登録する。
+    # そのため、利用者は設定画面で別途メールアドレスを登録しなくても通知を受け取れる。
+    set_current_shop_id(shop_id)
+    load_web_store()
+    save_line_recipient({
+        "name": manager_name,
+        "email": email,
+        "enabled": True,
+        "purchase_notice": True,
+        "theft_notice": True,
+        "video_notice": True,
+        "system_notice": True,
+    })
+    show_current_product_from_store()
+
+    session.clear()
+    session["user_email"] = email
+    session["manager_name"] = manager_name
+    session["shop_name"] = shop_name
+    session["shop_id"] = shop_id
+    return redirect(url_for("index"))
+
+
+@app.route("/login", methods=["GET", "POST"])
+def login():
+    if request.method == "GET":
+        return render_template("login.html")
+
+    email = str(request.form.get("email", "") or "").strip().lower()
+    password = str(request.form.get("password", "") or "")
+    user = load_users().get("users", {}).get(email)
+
+    if not user or not verify_password(password, user.get("password_hash", "")):
+        return render_template("login.html", error="メールアドレスまたはパスワードが違います。")
+
+    session.clear()
+    session["user_email"] = user.get("email", email)
+    session["manager_name"] = user.get("manager_name", "")
+    session["shop_name"] = user.get("shop_name", "")
+    session["shop_id"] = user.get("shop_id", "")
+
+    set_current_shop_id(session.get("shop_id"))
+    load_web_store()
+    show_current_product_from_store()
+    return redirect(url_for("index"))
+
+
+@app.route("/logout")
+def logout():
+    session.clear()
+    return redirect(url_for("login"))
 
 
 # =========================================================
@@ -110,10 +322,9 @@ def load_processed_session_ids():
 
 def save_processed_session_ids():
     data = {session_id: True for session_id in sorted(processed_session_ids)}
-    tmp_path = PROCESSED_SESSIONS_FILE.with_suffix(".tmp")
-    with open(tmp_path, "w", encoding="utf-8") as f:
+
+    with open(PROCESSED_SESSIONS_FILE, "w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=4)
-    tmp_path.replace(PROCESSED_SESSIONS_FILE)
 
 
 processed_session_ids = load_processed_session_ids()
@@ -713,6 +924,11 @@ def process_session_path(session_path, ignore_stability=False, force_reprocess=F
     decreased_items = get_decreased_items(theft_check)
 
     if not decreased_items:
+        # finished済みで減少商品が空のsessionは、内容が変わらないエラーとして処理済みにする。
+        # 自動監視で同じエラーを繰り返さないため。
+        processed_session_ids.add(session_id)
+        save_processed_session_ids()
+
         return {
             "status": "error",
             "message": "減少した商品情報がありません。",
@@ -723,6 +939,9 @@ def process_session_path(session_path, ignore_stability=False, force_reprocess=F
     line_results = []
 
     if judgement == "normal":
+        # 支払い完了判定の瞬間に緑LEDを点灯し、ブザーを停止する
+        show_paid()
+
         inventory_result = update_inventory_from_session(decreased_items)
 
         add_sales_records_from_session(
@@ -744,9 +963,12 @@ def process_session_path(session_path, ignore_stability=False, force_reprocess=F
             f"支払金額: {paid_amount}円"
         )
 
-        line_results.append(send_line_message(message))
+        line_results.append(send_line_message(message, notice_type="purchase"))
 
     elif judgement == "theft":
+        # 万引き・未払い判定の瞬間に赤LEDを点灯し、確認ボタンが押されるまでブザーを鳴らす
+        show_unpaid(shortage)
+
         inventory_result = update_inventory_from_session(decreased_items)
 
         add_notification_records_from_session(
@@ -775,38 +997,19 @@ def process_session_path(session_path, ignore_stability=False, force_reprocess=F
                     "video_file": str(video_path)
                 }
 
-            video_url = build_session_file_url(video_path)
-            preview_path = create_video_preview_image(video_path)
+            print("メール添付用 video_path:", video_path)
 
-            if preview_path:
-                preview_image_url = build_session_file_url(preview_path)
-            else:
-                preview_image_url = LINE_VIDEO_PREVIEW_URL
-
-            print("LINE送信用 video_url:", video_url)
-            print("LINE送信用 preview_image_url:", preview_image_url)
-
-            if video_url and preview_image_url:
-                line_result = send_line_video_message(
-                    text_message=message,
-                    video_url=video_url,
-                    preview_image_url=preview_image_url
-                )
-            else:
-                fallback_message = (
-                    message
-                    + "\n\n動画ファイルはありますが、LINE送信用URLまたはプレビュー画像URLが作成できませんでした。"
-                    + f"\n動画パス: {video_path}"
-                    + "\nPUBLIC_BASE_URL と LINE_VIDEO_PREVIEW_URL を確認してください。"
-                )
-                line_result = send_line_message(fallback_message)
+            line_result = send_line_video_message(
+                text_message=message,
+                video_path=str(video_path)
+            )
 
         else:
             fallback_message = (
                 message
                 + "\n\nこのセッションフォルダに動画ファイルが見つかりませんでした。"
             )
-            line_result = send_line_message(fallback_message)
+            line_result = send_line_message(fallback_message, notice_type="theft")
 
         line_results.append(line_result)
 
@@ -831,7 +1034,7 @@ def process_session_path(session_path, ignore_stability=False, force_reprocess=F
             f"内容: {error_message}"
         )
 
-        line_results.append(send_line_message(message))
+        line_results.append(send_line_message(message, notice_type="system"))
 
     else:
         return {
@@ -845,7 +1048,7 @@ def process_session_path(session_path, ignore_stability=False, force_reprocess=F
 
     return {
         "status": "success",
-        "message": "session.jsonの内容を履歴に反映し、LINE通知を送信しました。",
+        "message": "session.jsonの内容を履歴に反映し、メール通知を送信しました。",
         "session_id": session_id,
         "judgement": judgement,
         "session_file": str(session_path),
@@ -892,7 +1095,7 @@ def build_history_records_from_session(session_path):
     """
     1つのsession.jsonから、Web表示用の売上履歴・通知履歴を作る。
 
-    ここでは在庫変更やLINE送信は行わない。
+    ここでは在庫変更やメール送信は行わない。
     sessionsフォルダの中身とWeb履歴を一致させるためだけの処理。
     """
     session_path = Path(session_path)
@@ -1053,6 +1256,8 @@ def index():
         products=get_products(),
         sales_history=get_sales_history(),
         notification_history=get_notification_history(),
+        line_settings=get_line_settings(),
+        current_user=current_user_context(),
     )
 
 
@@ -1064,6 +1269,29 @@ def serve_session_file(filename):
 # =========================================================
 # 管理画面用API
 # =========================================================
+
+
+
+@app.route("/api/dashboard_data", methods=["GET"])
+def api_dashboard_data():
+    """
+    管理画面の更新に必要なデータをまとめて返すAPI。
+
+    以前は refreshAll() で複数APIを同時に呼び出していたため、
+    複数販売所対応後のグローバルな保存先切替と競合し、
+    まれに在庫データが空で保存される可能性があった。
+    このAPIでは1リクエスト内で同じshop_idのデータをまとめて返す。
+    """
+    return jsonify({
+        "status": "success",
+        "products": get_products(),
+        "inventory": get_inventory(),
+        "sales": get_sales_history(),
+        "notifications": get_notification_history(),
+        "weightSensors": get_weight_sensor_settings(),
+        "lineSettings": get_line_settings(),
+    })
+
 
 @app.route("/api/inventory", methods=["GET"])
 def api_get_inventory():
@@ -1101,6 +1329,9 @@ def api_update_inventory_count():
         }), 400
 
     result = set_inventory(item_name, count)
+
+    if result:
+        show_current_product_from_store()
 
     if not result:
         return jsonify({
@@ -1163,6 +1394,7 @@ def api_add_or_update_product():
 
     if isinstance(result, dict):
         if result.get("status") == "success":
+            show_current_product_from_store()
             return jsonify(result)
 
         if result.get("status") == "exists":
@@ -1197,6 +1429,7 @@ def api_delete_product():
         }), 400
 
     delete_product(item_name)
+    show_current_product_from_store()
 
     return jsonify({
         "status": "success",
@@ -1216,10 +1449,7 @@ def api_get_weight_sensors():
 @app.route("/api/weight_sensors/count", methods=["POST"])
 def api_set_weight_sensor_count():
     data = request.json or {}
-    try:
-        count = int(data.get("count", 0))
-    except Exception:
-        return jsonify({"status": "error", "message": "重量センサーの個数は数値で入力してください。"}), 400
+    count = int(data.get("count", 0))
 
     if count <= 0:
         return jsonify({
@@ -1256,6 +1486,9 @@ def api_set_weight_sensor_target():
         }), 400
 
     result = set_weight_sensor_target(sensor_id, item_name)
+
+    if result:
+        show_current_product_from_store()
 
     if not result:
         return jsonify({
@@ -1302,6 +1535,84 @@ def api_delete_weight_sensor():
     })
 
 
+
+
+@app.route("/api/line_settings", methods=["GET"])
+def api_get_line_settings():
+    return jsonify({
+        "status": "success",
+        "settings": get_line_settings()
+    })
+
+
+@app.route("/api/line_recipients", methods=["POST"])
+def api_save_line_recipient():
+    data = request.json or {}
+
+    name = str(data.get("name", "") or "").strip()
+    email = str(data.get("email", "") or "").strip()
+
+    if not name:
+        return jsonify({
+            "status": "error",
+            "message": "通知先名を入力してください。"
+        }), 400
+
+    if not email:
+        return jsonify({
+            "status": "error",
+            "message": "メールアドレスを入力してください。"
+        }), 400
+
+    if "@" not in email or "." not in email.split("@")[-1]:
+        return jsonify({
+            "status": "error",
+            "message": "正しいメールアドレスを入力してください。"
+        }), 400
+
+    settings = save_line_recipient({
+        "name": name,
+        "email": email,
+        "enabled": bool(data.get("enabled", True)),
+        "purchase_notice": bool(data.get("purchase_notice", True)),
+        "theft_notice": bool(data.get("theft_notice", True)),
+        "system_notice": bool(data.get("system_notice", True)),
+        "video_notice": bool(data.get("video_notice", True)),
+    })
+
+    return jsonify({
+        "status": "success",
+        "message": "メール通知先を保存しました。",
+        "settings": get_line_settings()
+    })
+
+
+@app.route("/api/line_recipients/delete", methods=["POST"])
+def api_delete_line_recipient():
+    data = request.json or {}
+    email = str(data.get("email", "") or "").strip()
+
+    if not email:
+        return jsonify({
+            "status": "error",
+            "message": "削除するメールアドレスが指定されていません。"
+        }), 400
+
+    deleted = delete_line_recipient(email)
+
+    if not deleted:
+        return jsonify({
+            "status": "error",
+            "message": "指定された通知先が見つかりません。"
+        }), 404
+
+    return jsonify({
+        "status": "success",
+        "message": "メール通知先を削除しました。",
+        "settings": get_line_settings()
+    })
+
+
 # =========================================================
 # session取込API
 # =========================================================
@@ -1328,7 +1639,7 @@ def api_generate_and_import_session():
 
     return jsonify({
         "status": result.get("status", "success"),
-        "message": result.get("message", "テスト用session.jsonを生成して取り込みました。"),
+        "message": result.get("message", "テスト用session.jsonを生成し、履歴反映とメール通知を行いました。"),
         "generated": generated,
         "import_result": result
     }), status_code
@@ -1399,6 +1710,10 @@ def api_clear_processed_sessions():
 
 
 if __name__ == "__main__":
+    # LED・ブザー・確認ボタン・LCD電子値札を初期化する
+    setup_hardware()
+    show_current_product_from_config()
+
     # 起動時に sessions フォルダの内容を基準にWeb履歴を復元する
     sync_web_histories_from_sessions()
 

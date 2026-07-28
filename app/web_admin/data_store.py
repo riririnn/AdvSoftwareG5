@@ -6,14 +6,39 @@ import importlib.util
 
 BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR.parent.parent
-RUNTIME_DIR = PROJECT_ROOT / "runtime"
-RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
+RUNTIME_STORE_DIR = PROJECT_ROOT / "runtime" / "web_admin"
+RUNTIME_STORE_DIR.mkdir(parents=True, exist_ok=True)
 
-# 制御側と同じ app/config.py をWeb管理画面から更新する
+# app/config.py の場所（GitHub側の配置: <repo>/app/config.py）
 APP_CONFIG_PATH = BASE_DIR.parent / "config.py"
 
-# Web管理画面用の保存ファイル（Git管理外のruntimeへ保存）
-DATA_STORE_PATH = RUNTIME_DIR / "data_store.json"
+# Web管理画面用の保存ファイル
+# 単独利用時は従来どおり runtime/web_admin/data_store.json を使う。
+# 複数販売所利用時は set_current_shop_id() により runtime/web_admin/shop_data/<shop_id>.json に切り替える。
+DEFAULT_DATA_STORE_PATH = RUNTIME_STORE_DIR / "data_store.json"
+SHOP_DATA_DIR = RUNTIME_STORE_DIR / "shop_data"
+SHOP_DATA_DIR.mkdir(parents=True, exist_ok=True)
+DATA_STORE_PATH = DEFAULT_DATA_STORE_PATH
+CURRENT_SHOP_ID = None
+
+
+def sanitize_shop_id(shop_id):
+    shop_id = str(shop_id or "").strip()
+    safe = "".join(ch for ch in shop_id if ch.isalnum() or ch in ["_", "-"])
+    return safe or "default"
+
+
+def set_current_shop_id(shop_id):
+    """ログイン中の販売所IDに応じて保存先JSONを切り替える。"""
+    global DATA_STORE_PATH, CURRENT_SHOP_ID
+    safe_shop_id = sanitize_shop_id(shop_id)
+    CURRENT_SHOP_ID = safe_shop_id
+    DATA_STORE_PATH = SHOP_DATA_DIR / f"{safe_shop_id}.json"
+    return DATA_STORE_PATH
+
+
+def get_current_shop_id():
+    return CURRENT_SHOP_ID
 
 
 products = {}
@@ -26,6 +51,11 @@ ai_history = []
 weight_sensor_count = 1
 weight_sensor_targets = {
     "sensor_1": ""
+}
+
+line_settings = {
+    "line_enabled": True,
+    "recipients": []
 }
 
 
@@ -437,6 +467,9 @@ def create_default_products():
     """
     47クラス分の商品候補を作る。
     初期在庫は空にするため、inventoryには入れない。
+
+    productsは「商品登録画面の候補マスタ」と「登録済みの価格・重量別商品」を
+    兼ねているため、未登録の商品候補も常に残しておく。
     """
     default_products = {}
 
@@ -455,6 +488,21 @@ def create_default_products():
         }
 
     return default_products
+
+
+def merge_with_default_product_master(current_products):
+    """
+    保存済み商品へ47クラスの商品候補を補完する。
+
+    config.pyは登録済み商品だけへ書き換えられるため、config.pyだけを元に
+    productsを作ると、最初に登録したトマトなど1種類しか商品登録画面へ
+    表示されなくなる。商品候補マスタを先に作り、保存済みの価格・重量別商品を
+    上書き・追加することで、常に全商品を選択できるようにする。
+    """
+    merged = create_default_products()
+    if isinstance(current_products, dict):
+        merged.update(current_products)
+    return merged
 
 
 def normalize_products(raw_products):
@@ -540,7 +588,7 @@ def normalize_inventory(raw_inventory, current_products):
 # ==========================================
 
 def load_web_store():
-    global products, inventory, weight_sensor_count, weight_sensor_targets
+    global products, inventory, weight_sensor_count, weight_sensor_targets, line_settings
     global sales_history, notification_history, ai_history
 
     if not DATA_STORE_PATH.exists():
@@ -554,10 +602,12 @@ def load_web_store():
         loaded_products = data.get("products", {})
         loaded_inventory = data.get("inventory", {})
 
-        products = normalize_products(loaded_products)
-
-        if not products:
-            products = create_default_products()
+        # 保存済み商品だけでなく、47クラス分の商品候補を常に残す。
+        # これにより、一度config.pyがトマトだけへ書き換えられても、
+        # 商品登録画面では他の商品を引き続き選択できる。
+        products = merge_with_default_product_master(
+            normalize_products(loaded_products)
+        )
 
         inventory = normalize_inventory(loaded_inventory, products)
 
@@ -582,6 +632,8 @@ def load_web_store():
         notification_history = loaded_notification_history if isinstance(loaded_notification_history, list) else []
         ai_history = loaded_ai_history if isinstance(loaded_ai_history, list) else []
 
+        line_settings = normalize_line_settings(data.get("line_settings", {}))
+
         save_web_store()
 
     except json.JSONDecodeError:
@@ -593,6 +645,7 @@ def load_web_store():
         sales_history = []
         notification_history = []
         ai_history = []
+        line_settings = {"line_enabled": True, "recipients": []}
         save_web_store()
 
     except Exception as error:
@@ -604,6 +657,7 @@ def load_web_store():
         sales_history = []
         notification_history = []
         ai_history = []
+        line_settings = {"line_enabled": True, "recipients": []}
         save_web_store()
 
 
@@ -615,7 +669,8 @@ def save_web_store():
         "weight_sensor_targets": weight_sensor_targets,
         "sales_history": sales_history,
         "notification_history": notification_history,
-        "ai_history": ai_history
+        "ai_history": ai_history,
+        "line_settings": line_settings
     }
 
     with open(DATA_STORE_PATH, "w", encoding="utf-8") as f:
@@ -627,7 +682,7 @@ def save_web_store():
 # ==========================================
 
 def load_from_config_py():
-    global products, inventory, weight_sensor_count, weight_sensor_targets
+    global products, inventory, weight_sensor_count, weight_sensor_targets, line_settings
 
     if not APP_CONFIG_PATH.exists():
         print("config.py が見つからないため、デフォルト商品マスタを使います:", APP_CONFIG_PATH)
@@ -635,6 +690,7 @@ def load_from_config_py():
         inventory = {}
         weight_sensor_count = 1
         weight_sensor_targets = {"sensor_1": ""}
+        line_settings = {"line_enabled": True, "recipients": []}
         save_web_store()
         return
 
@@ -644,34 +700,44 @@ def load_from_config_py():
         spec.loader.exec_module(config_module)
 
         vegetable_prices = getattr(config_module, "VEGETABLE_PRICES", {})
-        vegetable_weights = getattr(config_module, "VEGETABLE_WEIGHTS", {})
+        vegetable_weights_raw = getattr(config_module, "VEGETABLE_WEIGHTS", {})
         config_sensor_count = getattr(config_module, "WEIGHT_SENSOR_COUNT", 1)
         config_sensor_targets = getattr(config_module, "WEIGHT_SENSOR_TARGETS", {})
 
         if not isinstance(vegetable_prices, dict):
             vegetable_prices = {}
-        if not isinstance(vegetable_weights, dict):
-            vegetable_weights = {}
 
-        products = {}
-
-        if vegetable_prices:
-            for label, price in vegetable_prices.items():
-                label = normalize_label(label)
-                display_name = get_japanese_name(label)
-                weight = int(vegetable_weights.get(label, DEFAULT_WEIGHTS.get(label, 100)))
-                price = int(price)
-                product_id = make_product_id(label, price, weight)
-
-                products[product_id] = {
-                    "display_name": display_name,
-                    "label": label,
-                    "price": price,
-                    "weight": weight,
-                    "active": True
-                }
+        # 旧config.pyではVEGETABLE_WEIGHTSが単一数値のことがある。
+        if isinstance(vegetable_weights_raw, dict):
+            vegetable_weights = vegetable_weights_raw
+            scalar_weight = None
         else:
-            products = create_default_products()
+            vegetable_weights = {}
+            try:
+                scalar_weight = int(vegetable_weights_raw)
+            except Exception:
+                scalar_weight = None
+
+        # config.pyには登録済み商品だけが書かれていても、商品登録候補は47種類残す。
+        products = create_default_products()
+
+        for label, price in vegetable_prices.items():
+            label = normalize_label(label)
+            display_name = get_japanese_name(label)
+            weight = vegetable_weights.get(label)
+            if weight is None:
+                weight = scalar_weight if scalar_weight is not None else DEFAULT_WEIGHTS.get(label, 100)
+            weight = int(weight)
+            price = int(price)
+            product_id = make_product_id(label, price, weight)
+
+            products[product_id] = {
+                "display_name": display_name,
+                "label": label,
+                "price": price,
+                "weight": weight,
+                "active": True
+            }
 
         inventory = {}
 
@@ -916,6 +982,122 @@ def get_weight_sensor_settings():
     }
 
 
+
+# ==========================================
+# メール通知設定
+# ==========================================
+
+def normalize_line_settings(raw_settings):
+    """Webで登録するメール通知設定を正規化する。
+
+    以前のLINE版との互換性のため、関数名と保存キーは line_settings のまま残す。
+    ただし、通知先IDは user_id ではなく email を使用する。
+    """
+    if not isinstance(raw_settings, dict):
+        raw_settings = {}
+
+    recipients = raw_settings.get("recipients", [])
+    if not isinstance(recipients, list):
+        recipients = []
+
+    normalized_recipients = []
+    seen_emails = set()
+
+    for recipient in recipients:
+        if not isinstance(recipient, dict):
+            continue
+
+        email = str(recipient.get("email", "") or "").strip()
+
+        # 旧LINE版のデータが残っている場合、user_idはメールではないため無視する。
+        if not email:
+            continue
+
+        email_key = email.lower()
+        if email_key in seen_emails:
+            continue
+
+        seen_emails.add(email_key)
+        normalized_recipients.append({
+            "name": str(recipient.get("name", "") or "").strip() or "通知先",
+            "email": email,
+            "enabled": bool(recipient.get("enabled", True)),
+            "purchase_notice": bool(recipient.get("purchase_notice", True)),
+            "theft_notice": bool(recipient.get("theft_notice", True)),
+            "system_notice": bool(recipient.get("system_notice", True)),
+            "video_notice": bool(recipient.get("video_notice", True)),
+        })
+
+    return {
+        "line_enabled": True,
+        "recipients": normalized_recipients
+    }
+
+
+def get_line_settings():
+    global line_settings
+    line_settings = normalize_line_settings(line_settings)
+    return line_settings
+
+
+def set_line_enabled(enabled):
+    global line_settings
+    line_settings = normalize_line_settings(line_settings)
+    line_settings["line_enabled"] = True
+    save_web_store()
+    return line_settings
+
+
+def save_line_recipient(recipient):
+    global line_settings
+    line_settings = normalize_line_settings(line_settings)
+
+    if not isinstance(recipient, dict):
+        return None
+
+    email = str(recipient.get("email", "") or "").strip()
+    if not email:
+        return None
+
+    new_recipient = {
+        "name": str(recipient.get("name", "") or "").strip() or "通知先",
+        "email": email,
+        "enabled": bool(recipient.get("enabled", True)),
+        "purchase_notice": bool(recipient.get("purchase_notice", True)),
+        "theft_notice": bool(recipient.get("theft_notice", True)),
+        "system_notice": bool(recipient.get("system_notice", True)),
+        "video_notice": bool(recipient.get("video_notice", True)),
+    }
+
+    recipients = []
+    updated = False
+    for current in line_settings.get("recipients", []):
+        if str(current.get("email", "") or "").strip().lower() == email.lower():
+            recipients.append(new_recipient)
+            updated = True
+        else:
+            recipients.append(current)
+
+    if not updated:
+        recipients.append(new_recipient)
+
+    line_settings["recipients"] = recipients
+    save_web_store()
+    return new_recipient
+
+
+def delete_line_recipient(email):
+    global line_settings
+    email = str(email or "").strip()
+    line_settings = normalize_line_settings(line_settings)
+    before = len(line_settings.get("recipients", []))
+    line_settings["recipients"] = [
+        recipient for recipient in line_settings.get("recipients", [])
+        if str(recipient.get("email", "") or "").strip().lower() != email.lower()
+    ]
+    save_web_store()
+    return len(line_settings.get("recipients", [])) < before
+
 # ==========================================
 # 重量センサー設定
 # ==========================================
@@ -1097,6 +1279,11 @@ def add_or_update_product(item_name, item_label, price, count, weight):
     }
 
     inventory[product_id] = count
+
+    # LCD・重量センサーが1台だけの構成では、最初に登録した商品をsensor_1へ
+    # 自動設定する。2件目以降は管理画面で選択中の商品を勝手に変更しない。
+    if not str(weight_sensor_targets.get("sensor_1", "") or "").strip():
+        weight_sensor_targets["sensor_1"] = product_id
 
     save_web_store()
 

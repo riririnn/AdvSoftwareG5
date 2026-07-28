@@ -888,15 +888,18 @@ def process_session_path(session_path, ignore_stability=False, force_reprocess=F
 
     session_id = get_session_id(session_path, session_data)
 
-    # 取込対象のsessionフォルダには、判定結果に関係なくmonitor.mp4を必ず用意する
-    ensure_default_video_in_session(session_path.parent)
-
+    # 処理済みのsessionは、動画コピーやプレビュー生成を行う前にスキップする。
+    # これにより、既存sessionの権限を変更せずに、過去フォルダへ
+    # monitor_preview.jpgを書き込もうとする処理を防ぐ。
     if session_id in processed_session_ids and not force_reprocess:
         return {
             "status": "skipped",
             "message": "このsession.jsonはすでに反映済みです。",
             "session_id": session_id
         }
+
+    # 未処理または手動再処理のsessionだけ、monitor.mp4とプレビューを用意する。
+    ensure_default_video_in_session(session_path.parent)
 
     status = session_data.get("status", "")
     theft_check = get_theft_check(session_data)
@@ -1724,3 +1727,4 @@ if __name__ == "__main__":
     watcher_thread.start()
 
     app.run(host="0.0.0.0", port=5000, debug=True, use_reloader=False)
+    

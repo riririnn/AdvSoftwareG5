@@ -58,7 +58,11 @@ from csv_logger import (
 )
 
 from recorder import Recorder
-from raspberry_pi import get_weights, get_vegetable_weight
+from raspberry_pi import (
+    WeightReadError,
+    get_weights,
+    get_vegetable_weight,
+)
 from launcher import launch
 from payment_indicator import (
     setup as setup_payment_indicator,
@@ -505,6 +509,39 @@ class _LivePaymentMonitor:
             self._thread.join(timeout=PAYMENT_LED_UPDATE_INTERVAL + 2.0)
 
 
+WEIGHT_MEASUREMENT_ERROR = "MEASUREMENT_ERROR"
+
+
+def _measure_and_log_weights(session_dir: Path, phase: str) -> dict:
+    """重量を安定測定してCSVへ保存する。
+
+    全リトライに失敗したセンサーは0.0gではなく
+    MEASUREMENT_ERRORとして記録する。theft_checkerはこれを判定不能として
+    扱うため、測定失敗を未払いと誤認してブザーを鳴らさない。
+    """
+    try:
+        weights = get_weights()
+    except WeightReadError as error:
+        weights = {
+            "vegetable": error.partial_weights.get("vegetable"),
+            "coinbox": error.partial_weights.get("coinbox"),
+        }
+        print(
+            f"[Controller] {phase}重量の測定に失敗しました: {error}"
+        )
+
+    for target in ("vegetable", "coinbox"):
+        value = weights.get(target)
+        log_weight(
+            session_dir,
+            phase,
+            target,
+            value if value is not None else WEIGHT_MEASUREMENT_ERROR,
+        )
+
+    return weights
+
+
 def _load_theft_check_result(session_dir: Path) -> dict:
     """theft_checker実行後のsession.jsonから最終判定を読み取る。"""
     path = session_dir / SESSION_INFO_FILENAME
@@ -593,27 +630,24 @@ class Controller:
             # 入店時重量取得
             # -----------------------------
 
-            before_weights = get_weights()
-
-            log_weight(
+            before_weights = _measure_and_log_weights(
                 session_dir,
                 "before",
-                "vegetable",
-                before_weights["vegetable"],
             )
 
-            log_weight(
-                session_dir,
-                "before",
-                "coinbox",
-                before_weights["coinbox"],
-            )
-
-            # 重量減少と投入硬貨から、来客中のLEDをリアルタイム更新する。
-            self.payment_monitor = _LivePaymentMonitor(
-                before_weights["vegetable"]
-            )
-            self.payment_monitor.start()
+            # 野菜の入店時重量を取得できた場合だけ、
+            # 重量減少と投入硬貨から来客中のLEDを更新する。
+            before_vegetable_weight = before_weights.get("vegetable")
+            if before_vegetable_weight is not None:
+                self.payment_monitor = _LivePaymentMonitor(
+                    before_vegetable_weight
+                )
+                self.payment_monitor.start()
+            else:
+                print(
+                    "[Controller] 入店時の野菜重量が取得できないため、"
+                    "リアルタイム支払いLEDは赤のまま維持します。"
+                )
 
             # -----------------------------
             # 録画開始
@@ -717,20 +751,9 @@ class Controller:
             # 退店後重量取得
             # -----------------------------
 
-            weights = get_weights()
-
-            log_weight(
+            _measure_and_log_weights(
                 session_dir,
                 "after",
-                "vegetable",
-                weights["vegetable"],
-            )
-
-            log_weight(
-                session_dir,
-                "after",
-                "coinbox",
-                weights["coinbox"],
             )
 
             # -----------------------------

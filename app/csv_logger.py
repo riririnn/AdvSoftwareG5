@@ -178,10 +178,15 @@ def log_weight(
     session_dir: Path,
     phase: str,
     target: str,
-    weight: float,
+    weight: float | str,
 ):
     """
-    重量ログ保存
+    重量ログ保存。
+
+    測定成功時は数値、全リトライ失敗時は
+    MEASUREMENT_ERRORなどの文字列を保存する。
+    文字列はtheft_checkerで判定不能として扱われ、
+    0.0gの正常値と混同されない。
     """
 
     with open(

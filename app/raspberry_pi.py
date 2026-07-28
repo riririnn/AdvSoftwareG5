@@ -64,9 +64,18 @@ SAMPLES_PER_READ = 5
 # ゼロ点調整（起動時のオフセット計測）に使うサンプル数
 ZERO_SAMPLES = 10
 
-# _read()の最大リトライ回数と時間予算（これを超えたら諦めて既知の値にフォールバック）
+# _read()の最大リトライ回数と時間予算。
+# 以前は全サンプル取得失敗時に0.0を返していたため、
+# 『測定失敗』と『本当に0g』を区別できなかった。
+# 現在は失敗をWeightReadErrorとして呼び出し元へ通知する。
 MAX_READ_ATTEMPTS = 100
 READ_TIME_BUDGET_SEC = 2.0
+
+# セッション開始・終了時の重量は複数回測定し、中央値を採用する。
+# 瞬間的なGPIOタイミング失敗や外乱の影響を抑えるための設定。
+STABLE_MEASUREMENT_COUNT = 3
+STABLE_MEASUREMENT_DELAY_SEC = 0.15
+MIN_VALID_STABLE_MEASUREMENTS = 2
 
 # ---- センサーの実体（初回呼び出し時に1度だけ初期化）----
 _hx_coin = None
@@ -76,13 +85,26 @@ _sensor_available = None  # None=未判定, True=実機, False=ダミー
 _sensor_lock = threading.RLock()
 
 
-def _read_raw_mean(hx, samples: int, fallback: float = 0.0) -> float:
+class WeightReadError(RuntimeError):
+    """HX711から有効な重量を取得できなかった場合の例外。"""
+
+    def __init__(self, message: str, partial_weights: dict | None = None):
+        super().__init__(message)
+        self.partial_weights = partial_weights or {}
+
+
+def _read_raw_mean(hx, samples: int) -> float | None:
     """
     指定回数センサーを読み、raw値(ADCカウント)の平均を返す。
 
     ライブラリ標準の get_raw_data() は失敗時に無限リトライしてフリーズする
     ため使わず、内部の _read() を有限回数だけ自前でリトライする。
-    時間予算・試行回数の上限に達したら fallback を返す（システムが停止しないことを優先）。
+    時間予算・試行回数の上限に達した場合、取得済みの値があれば
+    その平均を返す。1件も取得できなかった場合はNoneを返す。
+
+    重要:
+        Noneを0.0gへ変換しないこと。0.0gは正常な測定値にもなり得るため、
+        測定失敗と区別する必要がある。
     """
     values = []
     attempts = 0
@@ -99,8 +121,52 @@ def _read_raw_mean(hx, samples: int, fallback: float = 0.0) -> float:
             values.append(data)
 
     if not values:
-        return fallback
+        return None
     return statistics.mean(values)
+
+
+def _read_stable_raw(
+    hx,
+    sensor_name: str,
+    *,
+    measurements: int = STABLE_MEASUREMENT_COUNT,
+    samples: int = SAMPLES_PER_READ,
+) -> float:
+    """複数回のraw平均値を取得し、その中央値を返す。
+
+    一時的にHX711読み取りが失敗しても、規定回数のうち
+    MIN_VALID_STABLE_MEASUREMENTS回以上成功すれば中央値を採用する。
+    成功数が不足した場合はWeightReadErrorを発生させる。
+    """
+    valid_values: list[float] = []
+
+    for measurement_index in range(measurements):
+        with _realtime_priority():
+            raw = _read_raw_mean(hx, samples)
+
+        if raw is None:
+            print(
+                f"[raspberry_pi] 警告: {sensor_name}の測定"
+                f" {measurement_index + 1}/{measurements} に失敗しました。"
+            )
+        else:
+            valid_values.append(float(raw))
+
+        if measurement_index + 1 < measurements:
+            time.sleep(STABLE_MEASUREMENT_DELAY_SEC)
+
+    if len(valid_values) < MIN_VALID_STABLE_MEASUREMENTS:
+        raise WeightReadError(
+            f"{sensor_name}の有効な測定回数が不足しています"
+            f"（成功: {len(valid_values)}/{measurements}）"
+        )
+
+    stable_raw = float(statistics.median(valid_values))
+    print(
+        f"[raspberry_pi] {sensor_name}の安定測定: "
+        f"成功 {len(valid_values)}/{measurements}, raw中央値={stable_raw:.1f}"
+    )
+    return stable_raw
 
 
 class _realtime_priority:
@@ -167,8 +233,20 @@ def _init_sensors() -> bool:
         # ゼロ点調整は起動時の1回だけ行う。
         # 計測のたびに行うと、物が乗った状態が基準になってしまうため厳禁。
         _hx_coin = HX711(dout_pin=COIN_DT_PIN, pd_sck_pin=COIN_SCK_PIN)
-        _coin_offset = _read_raw_mean(_hx_coin, ZERO_SAMPLES)
-        print(f"[raspberry_pi] コイン用センサーのゼロ点調整が完了しました。(offset={_coin_offset:.0f})")
+
+    # ゼロ点も複数回測定し、読み取り失敗を0として採用しない。
+    _coin_offset = _read_stable_raw(
+        _hx_coin,
+        "コイン用センサーのゼロ点",
+        measurements=STABLE_MEASUREMENT_COUNT,
+        samples=ZERO_SAMPLES,
+    )
+    print(
+        "[raspberry_pi] コイン用センサーのゼロ点調整が完了しました。"
+        f"(offset={_coin_offset:.0f})"
+    )
+
+    with _realtime_priority():
 
         _hx_vegetable = HX711(dout_pin=VEGE_DT_PIN, pd_sck_pin=VEGE_SCK_PIN)
         # 野菜用は台＋商品が常時乗っているため raw offsetは取らず、
@@ -210,6 +288,11 @@ def get_vegetable_weight():
         with _realtime_priority():
             vege_raw = _read_raw_mean(_hx_vegetable, SAMPLES_PER_READ)
 
+        if vege_raw is None:
+            raise WeightReadError(
+                "野菜用センサーから有効な値を取得できませんでした"
+            )
+
         return _convert_vegetable_raw_to_grams(vege_raw)
 
 
@@ -233,17 +316,42 @@ def get_weights():
                 "coinbox": random.randint(900, 1000),
             }
 
-        # 読み取りの間だけリアルタイム優先度に昇格する。
-        with _realtime_priority():
-            coin_raw = _read_raw_mean(_hx_coin, SAMPLES_PER_READ)
-            vege_raw = _read_raw_mean(_hx_vegetable, SAMPLES_PER_READ)
-
-        coin_weight = (coin_raw - _coin_offset) / COIN_SCALE_RATIO
-
-        return {
-            "vegetable": _convert_vegetable_raw_to_grams(vege_raw),
-            "coinbox": round(max(coin_weight, 0.0), 1),
+        # セッション開始・終了時は各センサーを複数回測定し、
+        # 中央値を採用する。片方だけ失敗した場合も、成功した側の値は
+        # partial_weightsとして呼び出し元へ返す。
+        partial_weights = {
+            "vegetable": None,
+            "coinbox": None,
         }
+        errors = []
+
+        try:
+            coin_raw = _read_stable_raw(_hx_coin, "コイン用センサー")
+            coin_weight = (coin_raw - _coin_offset) / COIN_SCALE_RATIO
+            partial_weights["coinbox"] = round(max(coin_weight, 0.0), 1)
+        except WeightReadError as error:
+            errors.append(str(error))
+
+        try:
+            vege_raw = _read_stable_raw(_hx_vegetable, "野菜用センサー")
+            partial_weights["vegetable"] = (
+                _convert_vegetable_raw_to_grams(vege_raw)
+            )
+        except WeightReadError as error:
+            errors.append(str(error))
+
+        if errors:
+            raise WeightReadError(
+                " / ".join(errors),
+                partial_weights=partial_weights,
+            )
+
+        print(
+            "[raspberry_pi] 安定重量: "
+            f"コイン={partial_weights['coinbox']:.1f} g, "
+            f"野菜={partial_weights['vegetable']:.1f} g"
+        )
+        return partial_weights
 
 
 def cleanup():

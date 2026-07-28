@@ -78,7 +78,7 @@ RECORD_FPS = 3
 
 # GPU推論サーバー（app/web_server.py）のURL。
 # 別マシンで動かす場合はそのIPに変更する（例: "http://192.168.1.10:8080"）
-PREDICT_SERVER_URL = "http://localhost:8080"
+PREDICT_SERVER_URL = "http://100.98.67.33:8080"
 
 # 検出として採用する信頼度の下限（これ未満の検出は無視）
 PERSON_CONF_THRESHOLD = 0.5
@@ -129,19 +129,17 @@ WEIGHT_LOG_FILENAME = "weight.csv"
 # 商品設定
 # ==========================================
 
-# 野菜の単価（円）
-# 万引き判定（theft_checker.py）の購入金額算出に使用
-VEGETABLE_PRICES = {
-    "tomato": 50,
-    "eggplant": 100
-}
-
-
-# 対象とする野菜の名称
-TARGET_VEGETABLE = "eggplant"
-
-# 野菜の重量（g）
-VEGETABLE_WEIGHTS = 100
+# 商品の価格・単重量・重量センサーの割り当ては、Web管理画面(app/web_admin)が
+# 実行中に書き換えるためサーバーとラズパイで一致しない。
+# config.py は両者で同一に保つファイルなので、product_settings.py
+# （.gitignore対象）へ分離している。
+from product_settings import (  # noqa: E402
+    VEGETABLE_PRICES,
+    TARGET_VEGETABLE,
+    VEGETABLE_WEIGHTS,
+    WEIGHT_SENSOR_COUNT,
+    WEIGHT_SENSOR_TARGETS,
+)
 
 # 硬貨の重量 (g)
 COIN_WEIGHTS = {

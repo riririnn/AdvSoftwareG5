@@ -98,7 +98,7 @@ LCD_KATAKANA_NAMES = {
 
 
 BASE_DIR = Path(__file__).resolve().parent
-APP_CONFIG_PATH = BASE_DIR.parent / "config.py"
+PRODUCT_SETTINGS_PATH = BASE_DIR.parent / "product_settings.py"
 
 red_led = None
 green_led = None
@@ -484,19 +484,19 @@ def show_current_product_from_store():
 
 
 def load_config_module():
-    """app/config.pyを直接読み込む。"""
-    if not APP_CONFIG_PATH.exists():
-        print("config.pyが見つかりません:", APP_CONFIG_PATH)
+    """app/product_settings.pyを直接読み込む。"""
+    if not PRODUCT_SETTINGS_PATH.exists():
+        print("product_settings.pyが見つかりません:", PRODUCT_SETTINGS_PATH)
         return None
 
     try:
         spec = importlib.util.spec_from_file_location(
-            "mujin_runtime_config",
-            APP_CONFIG_PATH,
+            "mujin_runtime_product_settings",
+            PRODUCT_SETTINGS_PATH,
         )
 
         if spec is None or spec.loader is None:
-            print("config.pyの読み込み設定を作成できませんでした。")
+            print("product_settings.pyの読み込み設定を作成できませんでした。")
             return None
 
         module = importlib.util.module_from_spec(spec)
@@ -505,14 +505,14 @@ def load_config_module():
         return module
 
     except Exception as error:
-        print("config.pyの読み込みに失敗しました:", error)
+        print("product_settings.pyの読み込みに失敗しました:", error)
         return None
 
 
 def show_current_product_from_config():
     """
     起動直後など、Web管理データがまだ選択されていない場合に、
-    config.pyから商品情報を取得して表示する。
+    product_settings.pyから商品情報を取得して表示する。
 
     通常の商品登録・削除・センサー変更後は、
     show_current_product_from_store()を使用する。

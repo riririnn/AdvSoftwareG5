@@ -9,8 +9,10 @@ PROJECT_ROOT = BASE_DIR.parent.parent
 RUNTIME_STORE_DIR = PROJECT_ROOT / "runtime" / "web_admin"
 RUNTIME_STORE_DIR.mkdir(parents=True, exist_ok=True)
 
-# app/config.py の場所（GitHub側の配置: <repo>/app/config.py）
-APP_CONFIG_PATH = BASE_DIR.parent / "config.py"
+# 商品設定ファイルの場所（<repo>/app/product_settings.py）。
+# 価格・単重量・重量センサー割り当ては実機ごとに異なるため、
+# config.py ではなく git管理外のこのファイルを読み書きする。
+PRODUCT_SETTINGS_PATH = BASE_DIR.parent / "product_settings.py"
 
 # Web管理画面用の保存ファイル
 # 単独利用時は従来どおり runtime/web_admin/data_store.json を使う。
@@ -684,8 +686,8 @@ def save_web_store():
 def load_from_config_py():
     global products, inventory, weight_sensor_count, weight_sensor_targets, line_settings
 
-    if not APP_CONFIG_PATH.exists():
-        print("config.py が見つからないため、デフォルト商品マスタを使います:", APP_CONFIG_PATH)
+    if not PRODUCT_SETTINGS_PATH.exists():
+        print("product_settings.py が見つからないため、デフォルト商品マスタを使います:", PRODUCT_SETTINGS_PATH)
         products = create_default_products()
         inventory = {}
         weight_sensor_count = 1
@@ -695,7 +697,7 @@ def load_from_config_py():
         return
 
     try:
-        spec = importlib.util.spec_from_file_location("app_config", APP_CONFIG_PATH)
+        spec = importlib.util.spec_from_file_location("app_product_settings", PRODUCT_SETTINGS_PATH)
         config_module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(config_module)
 
@@ -786,18 +788,15 @@ def get_label_for_weight_sensor_target(target_value):
 
 def export_to_config_py():
     """
-    Web管理画面で登録された商品情報と重量センサー設定を app/config.py に反映する。
+    Web管理画面で登録された商品情報と重量センサー設定を
+    app/product_settings.py に反映する（無ければ新規作成する）。
 
     重要:
     - products には47種類の商品候補が入っている。
-    - そのため products 全体を書き出すと、未登録の商品まで config.py に出てしまう。
-    - config.py へは「現在の在庫 inventory に存在する商品だけ」を書き出す。
+    - そのため products 全体を書き出すと、未登録の商品まで書き出されてしまう。
+    - 「現在の在庫 inventory に存在する商品だけ」を書き出す。
     - TARGET_VEGETABLE には sensor_1 に設定している商品のYOLOラベルを書き出す。
     """
-    if not APP_CONFIG_PATH.exists():
-        print("config.py が見つかりません:", APP_CONFIG_PATH)
-        return False
-
     # =====================================================
     # 現在の在庫に登録されている商品だけを抽出する
     # =====================================================
@@ -853,7 +852,16 @@ def export_to_config_py():
         else:
             config_weight_sensor_targets[sensor_id] = ""
 
-    new_product_setting = f"""# 商品の単価（円）
+    # product_settings.py は商品設定専用のファイルなので、丸ごと書き出す。
+    new_product_setting = f'''"""
+商品設定（価格・単重量・重量センサーの割り当て）。
+
+このファイルは **git管理外**（.gitignore対象）で、実機ごとに内容が異なる。
+Web管理画面（app/web_admin）の操作により自動生成される。
+手で編集してもよいが、次にWeb管理画面から操作した時点で上書きされる。
+"""
+
+# 商品の単価（円）
 # 管理画面から更新されます
 VEGETABLE_PRICES = {format_python_dict(vegetable_prices)}
 
@@ -874,46 +882,17 @@ WEIGHT_SENSOR_COUNT = {weight_sensor_count}
 
 # 各重量センサーの上に置いている商品のラベル
 WEIGHT_SENSOR_TARGETS = {format_python_dict(config_weight_sensor_targets)}
-"""
+'''
 
     try:
-        with open(APP_CONFIG_PATH, "r", encoding="utf-8") as f:
-            config_text = f.read()
+        with open(PRODUCT_SETTINGS_PATH, "w", encoding="utf-8") as f:
+            f.write(new_product_setting)
 
-        start_markers = [
-            "# 商品の単価（円）",
-            "# 野菜の単価（円）",
-        ]
-
-        start_index = -1
-        for marker in start_markers:
-            index = config_text.find(marker)
-            if index != -1:
-                start_index = index
-                break
-
-        end_marker = "# 硬貨の重量"
-        end_index = config_text.find(end_marker)
-
-        if start_index == -1 or end_index == -1:
-            print("config.py の商品設定部分を見つけられませんでした。")
-            return False
-
-        updated_config_text = (
-            config_text[:start_index]
-            + new_product_setting
-            + "\n"
-            + config_text[end_index:]
-        )
-
-        with open(APP_CONFIG_PATH, "w", encoding="utf-8") as f:
-            f.write(updated_config_text)
-
-        print("config.py の商品設定を書き換えました:", APP_CONFIG_PATH)
+        print("product_settings.py を書き換えました:", PRODUCT_SETTINGS_PATH)
         return True
 
     except Exception as error:
-        print("config.py への商品設定反映に失敗しました:", error)
+        print("product_settings.py への商品設定反映に失敗しました:", error)
         return False
 
 

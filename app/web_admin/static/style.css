@@ -707,7 +707,7 @@ button { cursor: pointer; }
     gap: 14px;
 }
 
-.checkbox-line {
+.product-form .checkbox-line {
     display: inline-flex;
     align-items: center;
     gap: 10px;

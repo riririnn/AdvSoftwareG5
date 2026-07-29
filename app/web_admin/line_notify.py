@@ -85,7 +85,8 @@ def get_notice_flag_names(notice_type):
         return ["theft_notice"]
 
     if notice_type in ["theft_video", "video", "動画通知"]:
-        return ["theft_notice", "video_notice"]
+        # 万引き通知を受け取る通知先には、動画も自動的に送る。
+        return ["theft_notice"]
 
     return ["system_notice"]
 

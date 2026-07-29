@@ -1193,11 +1193,13 @@ def normalize_line_settings(raw_settings):
         normalized_recipients.append({
             "name": str(recipient.get("name", "") or "").strip() or "通知先",
             "email": email,
-            "enabled": bool(recipient.get("enabled", True)),
+            # 有効/動画/システム通知はUIから設定させず、常に有効にする。
+            # 万引き通知を受け取る通知先には、動画も自動的に添付される。
+            "enabled": True,
             "purchase_notice": bool(recipient.get("purchase_notice", True)),
             "theft_notice": bool(recipient.get("theft_notice", True)),
-            "system_notice": bool(recipient.get("system_notice", True)),
-            "video_notice": bool(recipient.get("video_notice", True)),
+            "system_notice": True,
+            "video_notice": True,
         })
 
     return {
@@ -1234,11 +1236,13 @@ def save_line_recipient(recipient):
     new_recipient = {
         "name": str(recipient.get("name", "") or "").strip() or "通知先",
         "email": email,
-        "enabled": bool(recipient.get("enabled", True)),
+        # 有効/動画/システム通知はUIから設定させず、常に有効にする。
+        # 万引き通知を受け取る通知先には、動画も自動的に添付される。
+        "enabled": True,
         "purchase_notice": bool(recipient.get("purchase_notice", True)),
         "theft_notice": bool(recipient.get("theft_notice", True)),
-        "system_notice": bool(recipient.get("system_notice", True)),
-        "video_notice": bool(recipient.get("video_notice", True)),
+        "system_notice": True,
+        "video_notice": True,
     }
 
     recipients = []

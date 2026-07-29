@@ -267,11 +267,8 @@
                             </div>
 
                             <div class="notice-check-grid compact">
-                                <label class="checkbox-line"><input id="noticeEnabled" type="checkbox" checked />この通知先を有効にする</label>
                                 <label class="checkbox-line"><input id="purchaseNotice" type="checkbox" checked />購入通知を送る</label>
-                                <label class="checkbox-line"><input id="theftNotice" type="checkbox" checked />万引き通知を送る</label>
-                                <label class="checkbox-line"><input id="videoNotice" type="checkbox" checked />動画通知を送る</label>
-                                <label class="checkbox-line"><input id="systemNotice" type="checkbox" checked />システム通知を送る</label>
+                                <label class="checkbox-line"><input id="theftNotice" type="checkbox" checked />万引き通知を送る（動画も添付されます）</label>
                             </div>
 
                             <button class="primary-button" type="submit">通知先を保存</button>
@@ -847,10 +844,8 @@ function renderLineSettings() {
                 <small>${escapeHtml(maskEmail(recipient.email || ''))}</small>
             </div>
             <div class="recipient-flags">
-                ${recipient.enabled ? '<span class="type-badge green">有効</span>' : '<span class="type-badge">無効</span>'}
                 ${recipient.purchase_notice ? '<span class="type-badge blue">購入</span>' : ''}
                 ${recipient.theft_notice ? '<span class="type-badge orange">万引き</span>' : ''}
-                ${recipient.video_notice ? '<span class="type-badge green">動画</span>' : ''}
             </div>
             <button class="outline-red" type="button" onclick="deleteLineRecipient('${escapeAttr(recipient.email)}')">削除</button>
         </article>
@@ -958,11 +953,8 @@ document.getElementById('lineRecipientForm').addEventListener('submit', async (e
     const payload = {
         name: document.getElementById('lineRecipientName').value,
         email: document.getElementById('lineEmail').value,
-        enabled: document.getElementById('noticeEnabled').checked,
         purchase_notice: document.getElementById('purchaseNotice').checked,
-        theft_notice: document.getElementById('theftNotice').checked,
-        system_notice: document.getElementById('systemNotice').checked,
-        video_notice: document.getElementById('videoNotice').checked
+        theft_notice: document.getElementById('theftNotice').checked
     };
 
     try {
@@ -971,11 +963,8 @@ document.getElementById('lineRecipientForm').addEventListener('submit', async (e
             body: JSON.stringify(payload)
         });
         document.getElementById('lineRecipientForm').reset();
-        document.getElementById('noticeEnabled').checked = true;
         document.getElementById('purchaseNotice').checked = true;
         document.getElementById('theftNotice').checked = true;
-        document.getElementById('videoNotice').checked = true;
-        document.getElementById('systemNotice').checked = true;
         state.lineSettings = result.settings || state.lineSettings;
         renderLineSettings();
         showToast(result.message || 'メール通知先を保存しました。');

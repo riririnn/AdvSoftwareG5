@@ -121,11 +121,12 @@ def _open_camera(camera_index: int) -> cv2.VideoCapture:
     # select() timeout が発生することを実機で確認した。
     # MJPGなら1台あたり1〜3MB/s程度に収まり、2台同時でも余裕がある。
     #
-    # ただし NO_MJPG_CAMERA_INDEXES に含まれるカメラ(video0)は例外的に
-    # MJPGを使わずYUYVのまま開く。このカメラはPC直結では正常に動作する
-    # にもかかわらず、このラズパイ実機でMJPG転送時のみ"Corrupt JPEG data"
-    # 警告が高頻度で発生することを診断で確認しており(config.py参照)、
-    # JPEGデコードを行わないYUYVに切り替えることで原理的に回避する。
+    # ただし NO_MJPG_CAMERA_INDEXES に含まれるカメラ(video0, video2, video4)は
+    # 例外的にMJPGを使わずYUYVのまま開く。これらのカメラはPC直結では正常に
+    # 動作するにもかかわらず、このラズパイ実機でMJPG転送時のみ
+    # "Corrupt JPEG data"警告が高頻度で発生することを診断で確認しており
+    # (config.py参照)、JPEGデコードを行わないYUYVに切り替えることで
+    # 原理的に回避する。
     # ※ FOURCCは解像度設定より先に指定する（V4L2の作法）。
     if camera_index not in NO_MJPG_CAMERA_INDEXES:
         cap.set(cv2.CAP_PROP_FOURCC, cv2.VideoWriter_fourcc(*"MJPG"))

@@ -56,8 +56,9 @@ CAMERA_FPS = 10
 # 対象:
 #  - video0: UVC Camera(046d:081b, Logicool C310)
 #  - video4: UVC Camera(046d:0821, 監視カメラ)
+#  - video2: C922 Pro Stream Webcam（コインカメラ）
 #
-# どちらも、PC直結では正常に撮影できるにもかかわらず、このラズパイ実機で
+# video0/video4は、PC直結では正常に撮影できるにもかかわらず、このラズパイ実機で
 # MJPG転送時のみ"Corrupt JPEG data"警告が高頻度（実測ほぼ100%のフレーム）で
 # 発生することを診断・実機テストで確認した。C310についてはUSBポート交換・
 # 電源電圧(vcgencmd get_throttled=0x0)確認でも解消せず、ケーブルはカメラ
@@ -66,13 +67,18 @@ CAMERA_FPS = 10
 # 判断した(docs/corrupt_jpeg_diagnosis.md 参照)。046d:0821でも実機で同様の
 # 大量警告を確認したため、同じ対策(YUYV化)を適用する。
 # JPEGデコード自体を行わないYUYVに切り替えることで原理的に解消する。
-# 帯域は単体なら10fps・640x480で問題にならない（コインカメラのC922は
-# MJPGのまま=対策済みの帯域負荷のみ）。2台同時にYUYV化した場合の帯域は
-# 未検証のため、select() timeoutが再発しないか実機で確認すること。
 #
-# v4l2-ctl --list-devices で上記2機種が指しているデバイス番号を確認し、
+# video2(C922)は当初、単体テストではMJPGのままで問題なかったため対策対象外
+# としていたが、実運用中に同じ"Corrupt JPEG data"警告が確認されたため、
+# 同じ対策(YUYV化)を適用する。
+# ⚠️ 3台同時にYUYV化した場合の合計帯域（640x480・10fps×3台）は
+# docs/corrupt_jpeg_diagnosis.md の手順で未検証のため、実機投入後は
+# select() timeoutが再発していないか必ず確認すること。再発する場合は
+# CAMERA_FPS引き下げや解像度削減を検討する。
+#
+# v4l2-ctl --list-devices で上記3機種が指しているデバイス番号を確認し、
 # 挿し替え等で番号が変わった場合はここも合わせて変更すること。
-NO_MJPG_CAMERA_INDEXES = {0, 4}
+NO_MJPG_CAMERA_INDEXES = {0, 2, 4}
 
 # 録画(monitor.mp4)のフレームレート。カメラ取得のCAMERA_FPSとは独立。
 # 録画は専用スレッドがこの周期で最新フレームを書き込む方式のため、

@@ -4,6 +4,7 @@ import json
 import importlib.util
 import os
 import shutil
+import uuid
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -670,6 +671,11 @@ def load_web_store():
         sales_history = loaded_sales_history if isinstance(loaded_sales_history, list) else []
         notification_history = loaded_notification_history if isinstance(loaded_notification_history, list) else []
         ai_history = loaded_ai_history if isinstance(loaded_ai_history, list) else []
+
+        # 旧データにはidが無いため、削除機能のために補完する。
+        for record in notification_history:
+            if isinstance(record, dict) and not record.get("id"):
+                record["id"] = uuid.uuid4().hex
 
         line_settings = normalize_line_settings(data.get("line_settings", {}))
         store_settings = normalize_store_settings(data.get("store_settings", {}))
@@ -1449,6 +1455,7 @@ def add_notification_record(notification_type, item_name, quantity, amount):
     display_name = get_product_display_name(product_id)
 
     record = {
+        "id": uuid.uuid4().hex,
         "time": datetime.now().strftime("%Y/%m/%d %H:%M:%S"),
         "type": notification_type,
         "item_name": display_name,
@@ -1458,6 +1465,35 @@ def add_notification_record(notification_type, item_name, quantity, amount):
 
     notification_history.insert(0, record)
     save_web_store()
+
+
+def delete_notification_record(notification_id):
+    """指定したIDの通知履歴を1件だけ削除する。"""
+    global notification_history
+
+    notification_id = str(notification_id or "").strip()
+    if not notification_id:
+        return False
+
+    before = len(notification_history)
+    notification_history = [
+        record for record in notification_history
+        if str(record.get("id", "")) != notification_id
+    ]
+
+    if len(notification_history) == before:
+        return False
+
+    save_web_store()
+    return True
+
+
+def clear_notification_history():
+    """通知履歴を全件削除する。"""
+    global notification_history
+    notification_history = []
+    save_web_store()
+    return True
 
 
 def add_ai_history_record(item_name, count):

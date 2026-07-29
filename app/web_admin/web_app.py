@@ -25,6 +25,8 @@ try:
         add_or_update_product,
         delete_product,
         add_notification_record,
+        delete_notification_record,
+        clear_notification_history,
         get_product_price,
         get_display_name_by_label,
         get_product_display_name,
@@ -55,6 +57,8 @@ except ImportError:
         add_or_update_product,
         delete_product,
         add_notification_record,
+        delete_notification_record,
+        clear_notification_history,
         get_product_price,
         get_display_name_by_label,
         get_product_display_name,
@@ -1240,6 +1244,35 @@ def api_get_sales():
 @app.route("/api/notifications", methods=["GET"])
 def api_get_notifications():
     return jsonify(get_notification_history())
+
+
+@app.route("/api/notifications/delete", methods=["POST"])
+def api_delete_notification():
+    data = request.json or {}
+    notification_id = data.get("id")
+
+    if not notification_id:
+        return jsonify({"status": "error", "message": "通知IDが指定されていません。"}), 400
+
+    deleted = delete_notification_record(notification_id)
+    if not deleted:
+        return jsonify({"status": "error", "message": "指定された通知は見つかりませんでした。"}), 404
+
+    return jsonify({
+        "status": "success",
+        "message": "通知を削除しました。",
+        "notifications": get_notification_history()
+    })
+
+
+@app.route("/api/notifications/clear", methods=["POST"])
+def api_clear_notifications():
+    clear_notification_history()
+    return jsonify({
+        "status": "success",
+        "message": "通知履歴をすべて削除しました。",
+        "notifications": get_notification_history()
+    })
 
 
 @app.route("/api/product", methods=["POST"])

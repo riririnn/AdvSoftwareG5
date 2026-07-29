@@ -681,6 +681,9 @@ button { cursor: pointer; }
 .settings-layout {
     display: grid;
     grid-template-columns: minmax(520px, 0.95fr) minmax(420px, 1.05fr);
+    grid-template-areas:
+        "farm form"
+        "list form";
     gap: 22px;
     align-items: start;
 }
@@ -688,6 +691,10 @@ button { cursor: pointer; }
 .settings-card {
     min-width: 0;
 }
+
+.farm-name-card { grid-area: farm; }
+.recipient-form-card { grid-area: form; }
+.recipient-list-card { grid-area: list; }
 
 .recipient-form {
     gap: 14px;
@@ -778,6 +785,10 @@ button { cursor: pointer; }
 @media (max-width: 980px) {
     .settings-layout {
         grid-template-columns: 1fr;
+        grid-template-areas:
+            "farm"
+            "form"
+            "list";
     }
 
     .recipient-field-grid {
@@ -792,6 +803,10 @@ button { cursor: pointer; }
 @media (max-width: 760px) {
     .settings-layout {
         grid-template-columns: 1fr;
+        grid-template-areas:
+            "farm"
+            "form"
+            "list";
     }
 
     .recipient-field-grid,

@@ -33,6 +33,8 @@ try:
         set_weight_sensor_target,
         delete_weight_sensor,
         get_line_settings,
+        get_store_settings,
+        set_farm_name,
         set_line_enabled,
         save_line_recipient,
         delete_line_recipient,
@@ -61,6 +63,8 @@ except ImportError:
         set_weight_sensor_target,
         delete_weight_sensor,
         get_line_settings,
+        get_store_settings,
+        set_farm_name,
         set_line_enabled,
         save_line_recipient,
         delete_line_recipient,
@@ -1135,6 +1139,7 @@ def index():
         sales_history=get_sales_history(),
         notification_history=get_notification_history(),
         line_settings=get_line_settings(),
+        store_settings=get_store_settings(),
     )
 
 
@@ -1165,6 +1170,7 @@ def api_dashboard_data():
         "notifications": get_notification_history(),
         "weightSensors": get_weight_sensor_settings(),
         "lineSettings": get_line_settings(),
+        "storeSettings": get_store_settings(),
     })
 
 
@@ -1410,6 +1416,43 @@ def api_delete_weight_sensor():
     })
 
 
+
+
+@app.route("/api/store_settings", methods=["GET", "POST"])
+def api_store_settings():
+    """この端末の管理画面に表示する農園名を取得・保存する。"""
+    if request.method == "GET":
+        return jsonify({
+            "status": "success",
+            "settings": get_store_settings()
+        })
+
+    data = request.json or {}
+    farm_name = str(data.get("farm_name", "") or "").strip()
+
+    if not farm_name:
+        return jsonify({
+            "status": "error",
+            "message": "農園名を入力してください。"
+        }), 400
+
+    if len(farm_name) > 60:
+        return jsonify({
+            "status": "error",
+            "message": "農園名は60文字以内で入力してください。"
+        }), 400
+
+    if not set_farm_name(farm_name):
+        return jsonify({
+            "status": "error",
+            "message": "農園名を保存できませんでした。"
+        }), 500
+
+    return jsonify({
+        "status": "success",
+        "message": "農園名を保存しました。",
+        "settings": get_store_settings()
+    })
 
 
 @app.route("/api/line_settings", methods=["GET"])

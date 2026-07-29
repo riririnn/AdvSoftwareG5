@@ -981,3 +981,21 @@ body {
     }
 }
 
+
+
+/* 農園名設定 */
+.farm-name-card {
+    align-self: start;
+}
+
+.form-help {
+    display: block;
+    margin-top: -4px;
+    color: var(--muted, #667085);
+    line-height: 1.6;
+}
+
+#homeFarmName,
+#headerFarmName {
+    overflow-wrap: anywhere;
+}

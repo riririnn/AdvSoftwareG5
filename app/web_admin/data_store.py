@@ -89,6 +89,12 @@ line_settings = {
     "recipients": []
 }
 
+# このRaspberry Piに設置されている販売所の表示設定。
+# ログインや複数販売所切替には使用せず、管理画面上の表示名としてのみ使用する。
+store_settings = {
+    "farm_name": "このRaspberry Piの無人販売所"
+}
+
 
 # ==========================================
 # 新データセットの商品ラベル
@@ -621,7 +627,7 @@ def normalize_inventory(raw_inventory, current_products):
 def load_web_store():
     migrate_legacy_shop_store_if_needed()
 
-    global products, inventory, weight_sensor_count, weight_sensor_targets, line_settings
+    global products, inventory, weight_sensor_count, weight_sensor_targets, line_settings, store_settings
     global sales_history, notification_history, ai_history
 
     if not DATA_STORE_PATH.exists():
@@ -666,6 +672,7 @@ def load_web_store():
         ai_history = loaded_ai_history if isinstance(loaded_ai_history, list) else []
 
         line_settings = normalize_line_settings(data.get("line_settings", {}))
+        store_settings = normalize_store_settings(data.get("store_settings", {}))
 
         save_web_store()
 
@@ -679,6 +686,7 @@ def load_web_store():
         notification_history = []
         ai_history = []
         line_settings = {"line_enabled": True, "recipients": []}
+        store_settings = {"farm_name": "このRaspberry Piの無人販売所"}
         save_web_store()
 
     except Exception as error:
@@ -691,6 +699,7 @@ def load_web_store():
         notification_history = []
         ai_history = []
         line_settings = {"line_enabled": True, "recipients": []}
+        store_settings = {"farm_name": "このRaspberry Piの無人販売所"}
         save_web_store()
 
 
@@ -703,7 +712,8 @@ def save_web_store():
         "sales_history": sales_history,
         "notification_history": notification_history,
         "ai_history": ai_history,
-        "line_settings": line_settings
+        "line_settings": line_settings,
+        "store_settings": store_settings
     }
 
     with open(DATA_STORE_PATH, "w", encoding="utf-8") as f:
@@ -715,7 +725,7 @@ def save_web_store():
 # ==========================================
 
 def load_from_config_py():
-    global products, inventory, weight_sensor_count, weight_sensor_targets, line_settings
+    global products, inventory, weight_sensor_count, weight_sensor_targets, line_settings, store_settings
 
     if not PRODUCT_SETTINGS_PATH.exists():
         print("product_settings.py が見つからないため、デフォルト商品マスタを使います:", PRODUCT_SETTINGS_PATH)
@@ -724,6 +734,7 @@ def load_from_config_py():
         weight_sensor_count = 1
         weight_sensor_targets = {"sensor_1": ""}
         line_settings = {"line_enabled": True, "recipients": []}
+        store_settings = {"farm_name": "このRaspberry Piの無人販売所"}
         save_web_store()
         return
 
@@ -995,6 +1006,42 @@ def get_weight_sensor_settings():
         "weight_sensor_targets": weight_sensor_targets
     }
 
+
+
+# ==========================================
+# 販売所表示設定
+# ==========================================
+
+def normalize_store_settings(settings):
+    """販売所表示設定を安全な形式へ正規化する。"""
+    if not isinstance(settings, dict):
+        settings = {}
+
+    farm_name = str(settings.get("farm_name", "") or "").strip()
+    if not farm_name:
+        farm_name = "このRaspberry Piの無人販売所"
+
+    # ヘッダー表示が崩れないよう、極端に長い値は保存時と同じ上限に揃える。
+    return {"farm_name": farm_name[:60]}
+
+
+def get_store_settings():
+    global store_settings
+    store_settings = normalize_store_settings(store_settings)
+    return dict(store_settings)
+
+
+def set_farm_name(farm_name):
+    """この端末の管理画面に表示する農園名を保存する。"""
+    global store_settings
+
+    farm_name = str(farm_name or "").strip()
+    if not farm_name:
+        return False
+
+    store_settings = {"farm_name": farm_name[:60]}
+    save_web_store()
+    return True
 
 
 # ==========================================

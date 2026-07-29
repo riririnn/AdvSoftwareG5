@@ -162,3 +162,7 @@ PCでプッシュした作業ブランチのコードを，プロジェクトの
 農園名ログインや販売所切替は使用せず、在庫・売上・通知先は各Raspberry Pi内の
 `runtime/web_admin/data_store.json`へ保存します。GPUサーバーはYOLO推論のみを担当します。
 詳細は [SINGLE_DEVICE_MODE.md](SINGLE_DEVICE_MODE.md) を参照してください。
+
+## 農園名の設定
+
+Web管理画面の「設定」から農園名を保存できます。保存した名前は、ホーム画面上部の「管理対象」とヘッダー右上へ反映されます。設定値は `runtime/web_admin/data_store.json` に保存されるため、Web管理画面を再起動しても保持されます。

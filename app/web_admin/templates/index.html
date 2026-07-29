@@ -26,8 +26,8 @@
 
             <div class="user-area">
                 <div class="shop-pill">
-                    <strong>この端末の管理画面</strong>
-                    <small>通知先は設定画面で管理</small>
+                    <strong id="headerFarmName">このRaspberry Piの無人販売所</strong>
+                    <small>この端末の管理画面</small>
                 </div>
             </div>
 
@@ -45,7 +45,7 @@
                 <div class="shop-title-card">
                     <div>
                         <p>管理対象</p>
-                        <h2>このRaspberry Piの無人販売所</h2>
+                        <h2 id="homeFarmName">このRaspberry Piの無人販売所</h2>
                     </div>
                     <span>1端末・1販売所</span>
                 </div>
@@ -243,6 +243,24 @@
                 </div>
 
                 <div class="settings-layout">
+                    <section class="card settings-card farm-name-card">
+                        <div class="card-header">
+                            <div>
+                                <span class="section-icon">▮</span>
+                                <h2>農園名設定</h2>
+                            </div>
+                        </div>
+
+                        <form id="farmNameForm" class="product-form">
+                            <label>
+                                農園名
+                                <input id="farmNameInput" type="text" maxlength="60" placeholder="例）山田農園" required />
+                            </label>
+                            <small class="form-help">保存した名前がホーム画面の「管理対象」に表示されます。</small>
+                            <button class="primary-button" type="submit">農園名を保存</button>
+                        </form>
+                    </section>
+
                     <section class="card settings-card">
                         <div class="card-header">
                             <div>
@@ -345,6 +363,7 @@ const state = {
     notifications: [],
     weightSensors: { weight_sensor_count: 1, weight_sensor_targets: {} },
     lineSettings: { line_enabled: true, recipients: [] },
+    storeSettings: { farm_name: 'このRaspberry Piの無人販売所' },
     notificationFilter: 'all'
 };
 
@@ -400,6 +419,7 @@ async function refreshAll(options = {}) {
         state.notifications = data.notifications || [];
         state.weightSensors = data.weightSensors || { weight_sensor_count: 1, weight_sensor_targets: {} };
         state.lineSettings = data.lineSettings || { line_enabled: true, recipients: [] };
+        state.storeSettings = data.storeSettings || { farm_name: 'このRaspberry Piの無人販売所' };
 
         renderAll();
         if (options.toast) showToast('最新の情報に更新しました。');
@@ -415,6 +435,7 @@ function renderAll() {
     renderInventory();
     renderWeightSensors();
     renderNotifications();
+    renderStoreSettings();
     renderLineSettings();
 }
 
@@ -741,6 +762,20 @@ async function generateAndImportSession() {
 }
 
 
+function renderStoreSettings() {
+    const settings = state.storeSettings || {};
+    const farmName = String(settings.farm_name || '').trim() || 'このRaspberry Piの無人販売所';
+
+    const homeName = document.getElementById('homeFarmName');
+    const headerName = document.getElementById('headerFarmName');
+    const input = document.getElementById('farmNameInput');
+
+    if (homeName) homeName.textContent = farmName;
+    if (headerName) headerName.textContent = farmName;
+    if (input && document.activeElement !== input) input.value = farmName;
+}
+
+
 function renderLineSettings() {
     const list = document.getElementById('lineRecipientList');
 
@@ -815,6 +850,25 @@ document.getElementById('productForm').addEventListener('submit', async (event) 
         document.getElementById('productForm').reset();
         await refreshAll();
         showToast(result.message || '商品を登録しました。');
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
+});
+
+
+document.getElementById('farmNameForm').addEventListener('submit', async (event) => {
+    event.preventDefault();
+
+    const farmName = document.getElementById('farmNameInput').value.trim();
+
+    try {
+        const result = await apiJson('/api/store_settings', {
+            method: 'POST',
+            body: JSON.stringify({ farm_name: farmName })
+        });
+        state.storeSettings = result.settings || state.storeSettings;
+        renderStoreSettings();
+        showToast(result.message || '農園名を保存しました。');
     } catch (error) {
         showToast(error.message, 'error');
     }

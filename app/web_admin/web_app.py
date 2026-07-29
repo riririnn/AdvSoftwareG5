@@ -44,7 +44,7 @@ try:
         set_current_shop_id,
         save_web_store,
     )
-    from .line_notify import send_line_message, send_line_video_message
+    from .line_notify import send_line_message, send_line_video_message, get_enabled_recipients
 except ImportError:
     from data_store import (
         get_inventory,
@@ -73,7 +73,7 @@ except ImportError:
         set_current_shop_id,
         save_web_store,
     )
-    from line_notify import send_line_message, send_line_video_message
+    from line_notify import send_line_message, send_line_video_message, get_enabled_recipients
 
 try:
     from .hardware_display import (
@@ -279,6 +279,39 @@ def login():
 def logout():
     session.clear()
     return redirect(url_for("login"))
+
+
+def initialize_background_shop_context():
+    """バックグラウンド監視が参照する販売所データを初期化する。
+
+    FlaskのsessionはHTTPリクエスト内でしか使えないため、起動直後の監視
+    スレッドはログイン中の販売所を取得できない。登録販売所が1つだけなら、
+    その販売所を監視対象として自動選択する。
+    """
+    users = load_users().get("users", {})
+    shop_ids = sorted({
+        str(user.get("shop_id", "") or "").strip()
+        for user in users.values()
+        if isinstance(user, dict) and str(user.get("shop_id", "") or "").strip()
+    })
+
+    if len(shop_ids) != 1:
+        print(
+            "メール通知用の販売所を自動選択できません。",
+            f"登録販売所数={len(shop_ids)}"
+        )
+        return False
+
+    shop_id = shop_ids[0]
+    set_current_shop_id(shop_id)
+    load_web_store()
+    recipients = get_line_settings().get("recipients", [])
+    print(
+        "メール通知用の販売所を設定しました:",
+        shop_id,
+        f"通知先={len(recipients)}件"
+    )
+    return True
 
 
 # =========================================================
@@ -891,8 +924,10 @@ def process_session_path(session_path, ignore_stability=False, force_reprocess=F
             "session_id": session_id
         }
 
-    # 未処理または手動再処理のsessionだけ、monitor.mp4とプレビューを用意する。
-    ensure_default_video_in_session(session_path.parent)
+    # controller.pyが生成した実セッションには、Web側からデフォルト動画を
+    # コピーしない。sudoで作成されたsessionフォルダへ書き込もうとすると
+    # Permission deniedになるため。デモ用sessionの動画準備は
+    # create_generated_session_json()側だけで行う。
 
     status = session_data.get("status", "")
     theft_check = get_theft_check(session_data)
@@ -933,6 +968,39 @@ def process_session_path(session_path, ignore_stability=False, force_reprocess=F
 
     items_text = build_items_text(decreased_items)
     line_results = []
+
+    # 通知先が読み込まれていない状態で在庫・履歴を更新して処理済みにすると、
+    # 後からログインしてもメールを再送できない。処理前に通知先を確認する。
+    video_path = None
+    if judgement == "normal":
+        required_notice_type = "purchase"
+    elif judgement == "theft":
+        video_path = find_session_video(session_path.parent)
+        required_notice_type = "theft_video" if video_path else "theft"
+    elif judgement == "error":
+        required_notice_type = "system"
+    else:
+        required_notice_type = "system"
+
+    enabled_recipients = get_enabled_recipients(required_notice_type)
+    if not enabled_recipients:
+        return {
+            "status": "waiting",
+            "message": (
+                "通知先設定を読み込めていない、または必要な通知設定がOFFです。"
+                f" notice_type={required_notice_type}"
+            ),
+            "session_id": session_id,
+            "notice_type": required_notice_type,
+        }
+
+    if video_path and not ignore_stability and not is_file_stable(video_path):
+        return {
+            "status": "waiting",
+            "message": "monitor.mp4が書き込み直後のため、次回監視で処理します。",
+            "session_id": session_id,
+            "video_file": str(video_path)
+        }
 
     if judgement == "normal":
         # LED・ブザーはcontroller.py側で制御する。
@@ -980,17 +1048,7 @@ def process_session_path(session_path, ignore_stability=False, force_reprocess=F
             f"不足金額: {shortage}円"
         )
 
-        video_path = find_session_video(session_path.parent)
-
         if video_path:
-            if not ignore_stability and not is_file_stable(video_path):
-                return {
-                    "status": "waiting",
-                    "message": "monitor.mp4が書き込み直後のため、次回監視で処理します。",
-                    "session_id": session_id,
-                    "video_file": str(video_path)
-                }
-
             print("メール添付用 video_path:", video_path)
 
             line_result = send_line_video_message(
@@ -1707,6 +1765,10 @@ if __name__ == "__main__":
     # LCD電子値札だけを初期化する
     setup_hardware()
     show_current_product_from_config()
+
+    # バックグラウンド監視はFlaskのログインsessionを直接参照できないため、
+    # 単一販売所の場合は起動時に通知設定を明示的に読み込む。
+    initialize_background_shop_context()
 
     # 起動時に sessions フォルダの内容を基準にWeb履歴を復元する
     sync_web_histories_from_sessions()

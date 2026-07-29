@@ -58,7 +58,10 @@ ENV_SMTP_FROM_ADDRESS = os.getenv("SMTP_FROM_ADDRESS", "").strip()
 
 def get_mail_config():
     sender_email = ENV_SMTP_USERNAME or str(SMTP_USERNAME or "").strip()
-    sender_password = ENV_SMTP_PASSWORD or str(SMTP_PASSWORD or "").strip()
+    raw_password = ENV_SMTP_PASSWORD or str(SMTP_PASSWORD or "")
+    # Googleのアプリパスワードは表示上4文字ごとに空白が入るため、
+    # 前後だけでなく内部の空白もすべて除去してSMTP認証へ渡す。
+    sender_password = "".join(raw_password.split())
     from_address = ENV_SMTP_FROM_ADDRESS or str(SMTP_FROM_ADDRESS or "").strip() or sender_email
 
     return {

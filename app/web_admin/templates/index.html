@@ -27,7 +27,7 @@
             <div class="user-area">
                 <div class="shop-pill">
                     <strong>{{ current_user.shop_name }}</strong>
-                    <small>{{ current_user.email }}</small>
+                    <small>通知先：{{ current_user.email }}</small>
                 </div>
                 <a class="logout-button" href="{{ url_for('logout') }}">ログアウト</a>
             </div>

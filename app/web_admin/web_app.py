@@ -8,6 +8,7 @@ import threading
 import time
 import hashlib
 import uuid
+import unicodedata
 from functools import wraps
 from datetime import datetime
 
@@ -153,6 +154,39 @@ def save_users(data):
         json.dump(data, f, ensure_ascii=False, indent=4)
 
 
+def normalize_shop_name(shop_name):
+    """農園名をログイン照合用に正規化する。
+
+    全角・半角の揺れ、前後の空白、連続する空白、大文字小文字の違いを
+    吸収する。表示用の農園名そのものは変更せず保存する。
+    """
+    normalized = unicodedata.normalize("NFKC", str(shop_name or ""))
+    normalized = " ".join(normalized.strip().split())
+    return normalized.casefold()
+
+
+def find_users_by_shop_name(users_data, shop_name):
+    """既存形式（メールアドレスをキーにしたusers.json）にも対応して検索する。"""
+    target = normalize_shop_name(shop_name)
+    if not target:
+        return []
+
+    matches = []
+    for user in users_data.get("users", {}).values():
+        if not isinstance(user, dict):
+            continue
+        if normalize_shop_name(user.get("shop_name", "")) == target:
+            matches.append(user)
+    return matches
+
+
+def farm_account_key(shop_name):
+    """users.json内で農園アカウントを保存する安定したキーを返す。"""
+    normalized = normalize_shop_name(shop_name)
+    digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
+    return f"farm_{digest}"
+
+
 def hash_password(password, salt=None):
     salt = salt or uuid.uuid4().hex
     digest = hashlib.sha256((salt + str(password)).encode("utf-8")).hexdigest()
@@ -168,7 +202,7 @@ def verify_password(password, stored_hash):
 
 
 def is_logged_in():
-    return bool(session.get("shop_id") and session.get("user_email"))
+    return bool(session.get("shop_id") and session.get("shop_name"))
 
 
 def current_user_context():
@@ -210,18 +244,25 @@ def register():
     password = str(request.form.get("password", "") or "")
 
     if not shop_name or not manager_name or not email or not password:
-        return render_template("register.html", error="販売所名、管理者名、メールアドレス、パスワードを入力してください。")
+        return render_template("register.html", error="農園名、管理者名、通知先メールアドレス、パスワードを入力してください。")
 
     users_data = load_users()
-    if email in users_data.get("users", {}):
-        return render_template("register.html", error="このメールアドレスはすでに登録されています。")
+    existing_farms = find_users_by_shop_name(users_data, shop_name)
+    if existing_farms:
+        return render_template(
+            "register.html",
+            error="この農園名はすでに登録されています。ログイン画面から農園名でログインしてください。",
+        )
 
+    # 1農園につき1つのshop_idを発行し、在庫・売上・通知履歴を農園単位で分離する。
     shop_id = f"shop_{uuid.uuid4().hex[:10]}"
-    users_data["users"][email] = {
+    account_key = farm_account_key(shop_name)
+    users_data["users"][account_key] = {
         "email": email,
         "password_hash": hash_password(password),
         "manager_name": manager_name,
         "shop_name": shop_name,
+        "shop_name_normalized": normalize_shop_name(shop_name),
         "shop_id": shop_id,
         "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
     }
@@ -256,17 +297,42 @@ def login():
     if request.method == "GET":
         return render_template("login.html")
 
-    email = str(request.form.get("email", "") or "").strip().lower()
+    shop_name = str(request.form.get("shop_name", "") or "").strip()
     password = str(request.form.get("password", "") or "")
-    user = load_users().get("users", {}).get(email)
+    users_data = load_users()
+    matches = find_users_by_shop_name(users_data, shop_name)
 
-    if not user or not verify_password(password, user.get("password_hash", "")):
-        return render_template("login.html", error="メールアドレスまたはパスワードが違います。")
+    if not matches:
+        return render_template("login.html", error="農園名またはパスワードが違います。")
+
+    # 旧版で同じ農園名を複数メールアドレスから登録していた場合、
+    # どのshop_idを使うか一意に決められないため、安全のためログインを止める。
+    distinct_shop_ids = {
+        str(user.get("shop_id", "") or "").strip()
+        for user in matches
+        if str(user.get("shop_id", "") or "").strip()
+    }
+    if len(distinct_shop_ids) > 1:
+        return render_template(
+            "login.html",
+            error="同じ農園名の登録が複数あります。管理者にデータ統合を依頼してください。",
+        )
+
+    user = next(
+        (
+            candidate
+            for candidate in matches
+            if verify_password(password, candidate.get("password_hash", ""))
+        ),
+        None,
+    )
+    if not user:
+        return render_template("login.html", error="農園名またはパスワードが違います。")
 
     session.clear()
-    session["user_email"] = user.get("email", email)
+    session["user_email"] = user.get("email", "")
     session["manager_name"] = user.get("manager_name", "")
-    session["shop_name"] = user.get("shop_name", "")
+    session["shop_name"] = user.get("shop_name", shop_name)
     session["shop_id"] = user.get("shop_id", "")
 
     set_current_shop_id(session.get("shop_id"))

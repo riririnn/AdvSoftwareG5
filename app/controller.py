@@ -1033,6 +1033,9 @@ class Controller:
                     indicator_show_paid(purchase_amount, paid_amount)
                 else:
                     indicator_show_idle()
+            elif judgement == "no_purchase":
+                # 何も取らず・買わずに立ち去った場合は、待機状態に戻すだけ。
+                indicator_show_idle()
             elif judgement == "theft":
                 indicator_show_theft(shortage)
             else:

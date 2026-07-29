@@ -730,7 +730,7 @@ def check_theft(session_dir: Path):
     -------
     dict
         {
-            "judgement": "theft" or "normal" or "error",
+            "judgement": "theft" or "normal" or "no_purchase" or "error",
             "purchase_amount": int or None,
                 重量ベースで算出した購入合計金額
             "paid_amount": int or None,
@@ -773,6 +773,8 @@ def check_theft(session_dir: Path):
         一致しなくても万引きとはみなさない。商品を取ったが結局戻した、
         支払った後に気が変わってコインを取り返した、などのケースを
         誤って万引き扱いしないため）
+    ・購入合計金額が0円（何も取っていない・通り過ぎただけ・取ったが
+      結局戻した） → "no_purchase"（"normal"とは区別する）
     ・上記いずれにも該当しない → "normal"
     """
 
@@ -853,10 +855,15 @@ def check_theft(session_dir: Path):
     # 多少合わなくても万引きとはみなさない。商品を取ったが結局戻した、
     # 支払った後に気が変わってコインを取り返した、などのケースで
     # 「何も買っていないのにお金の重さだけで万引き扱い」になるのを防ぐため。
+    #
+    # また、何も取っていない(通り過ぎただけ、取ったが結局戻した)場合は
+    # "normal"(購入成立)とは区別し、"no_purchase"として扱う。
     if shortage > 0:
         judgement = "theft"
     elif purchase_amount > 0 and coin_weight_status != "ok":
         judgement = "theft"
+    elif purchase_amount <= 0:
+        judgement = "no_purchase"
     else:
         judgement = "normal"
 
@@ -929,6 +936,8 @@ def _print_result(session_dir: Path, result: dict):
 
     if result["judgement"] == "theft":
         print(" Judgement : THEFT DETECTED")
+    elif result["judgement"] == "no_purchase":
+        print(" Judgement : NO PURCHASE (何も取っていません)")
     else:
         print(" Judgement : NORMAL PURCHASE")
 

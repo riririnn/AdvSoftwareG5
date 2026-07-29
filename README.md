@@ -155,3 +155,10 @@ PCでプッシュした作業ブランチのコードを，プロジェクトの
 2. 手元のPC（WSL） に戻り，VS Codeでコードを修正する．
 3. 再度 GitHub に Push する．
 4. ラズパイで Pull し，スクリプトを実行して再起動・確認する．
+
+## 🧺 Web管理画面の運用方針
+
+本システムは1台のRaspberry Piを1販売所専用として使用します。
+農園名ログインや販売所切替は使用せず、在庫・売上・通知先は各Raspberry Pi内の
+`runtime/web_admin/data_store.json`へ保存します。GPUサーバーはYOLO推論のみを担当します。
+詳細は [SINGLE_DEVICE_MODE.md](SINGLE_DEVICE_MODE.md) を参照してください。

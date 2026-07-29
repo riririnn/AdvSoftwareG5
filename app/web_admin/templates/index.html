@@ -26,10 +26,9 @@
 
             <div class="user-area">
                 <div class="shop-pill">
-                    <strong>{{ current_user.shop_name }}</strong>
-                    <small>通知先：{{ current_user.email }}</small>
+                    <strong>この端末の管理画面</strong>
+                    <small>通知先は設定画面で管理</small>
                 </div>
-                <a class="logout-button" href="{{ url_for('logout') }}">ログアウト</a>
             </div>
 
             <button class="header-notification" type="button" data-page="notifications" aria-label="通知を開く">
@@ -45,10 +44,10 @@
                 </div>
                 <div class="shop-title-card">
                     <div>
-                        <p>現在の販売所</p>
-                        <h2>{{ current_user.shop_name }}</h2>
+                        <p>管理対象</p>
+                        <h2>このRaspberry Piの無人販売所</h2>
                     </div>
-                    <span>{{ current_user.manager_name }} さん</span>
+                    <span>1端末・1販売所</span>
                 </div>
 
                 <div class="summary-grid">

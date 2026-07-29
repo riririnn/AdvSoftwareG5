@@ -54,3 +54,7 @@ app/web_admin/data_store.json
 app/web_admin/processed_sessions.json
 app/web_admin/monitor.mp4
 app/web_admin/monitor_preview.jpg
+
+# Local secrets
+*.env
+!mail.env.example

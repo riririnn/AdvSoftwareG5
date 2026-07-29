@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, jsonify, send_from_directory, session, redirect, url_for
+from flask import Flask, render_template, request, jsonify, send_from_directory
 from pathlib import Path
 from urllib.parse import quote
 import json
@@ -6,10 +6,6 @@ import os
 import shutil
 import threading
 import time
-import hashlib
-import uuid
-import unicodedata
-from functools import wraps
 from datetime import datetime
 
 try:
@@ -42,7 +38,6 @@ try:
         delete_line_recipient,
         replace_histories_from_sessions,
         load_web_store,
-        set_current_shop_id,
         save_web_store,
     )
     from .line_notify import send_line_message, send_line_video_message, get_enabled_recipients
@@ -71,7 +66,6 @@ except ImportError:
         delete_line_recipient,
         replace_histories_from_sessions,
         load_web_store,
-        set_current_shop_id,
         save_web_store,
     )
     from line_notify import send_line_message, send_line_video_message, get_enabled_recipients
@@ -103,7 +97,6 @@ except ImportError:
 
 
 app = Flask(__name__)
-app.secret_key = os.getenv("FLASK_SECRET_KEY", "mujin-demo-secret-key-change-me")
 
 BASE_DIR = Path(__file__).resolve().parent
 # app/web_admin/web_app.py から見たプロジェクトルート
@@ -112,7 +105,7 @@ PROJECT_ROOT = BASE_DIR.parent.parent
 # 別の場所を見る場合は環境変数 SESSIONS_DIR で上書きする。
 SESSIONS_DIR = Path(os.getenv("SESSIONS_DIR", str(PROJECT_ROOT / "sessions")))
 SESSIONS_DIR.mkdir(parents=True, exist_ok=True)
-# ログイン情報などの実行時データはGit管理外のruntimeへ保存する。
+# Web管理画面の実行時データはGit管理外のruntimeへ保存する。
 RUNTIME_DIR = PROJECT_ROOT / "runtime"
 RUNTIME_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -129,253 +122,20 @@ TEST_VIDEO_SOURCE = Path(os.getenv("TEST_VIDEO_SOURCE", str(RUNTIME_DIR / "monit
 TEST_PREVIEW_SOURCE = Path(os.getenv("TEST_PREVIEW_SOURCE", str(RUNTIME_DIR / "monitor_preview.jpg")))
 
 # =========================================================
-# 複数販売所向け：初回登録・ログイン管理
+# 1台のRaspberry Piを1販売所として扱う単一端末モード
 # =========================================================
-USERS_FILE = RUNTIME_DIR / "users.json"
 
+def initialize_single_device_store():
+    """単一販売所用のデータを読み込む。
 
-def load_users():
-    if not USERS_FILE.exists():
-        return {"users": {}}
-    try:
-        with open(USERS_FILE, "r", encoding="utf-8") as f:
-            data = json.load(f)
-        if not isinstance(data, dict):
-            return {"users": {}}
-        data.setdefault("users", {})
-        return data
-    except Exception as error:
-        print("users.json の読み込みに失敗しました:", error)
-        return {"users": {}}
-
-
-def save_users(data):
-    with open(USERS_FILE, "w", encoding="utf-8") as f:
-        json.dump(data, f, ensure_ascii=False, indent=4)
-
-
-def normalize_shop_name(shop_name):
-    """農園名をログイン照合用に正規化する。
-
-    全角・半角の揺れ、前後の空白、連続する空白、大文字小文字の違いを
-    吸収する。表示用の農園名そのものは変更せず保存する。
+    ログインや販売所切替は行わず、このRaspberry Pi内の
+    runtime/web_admin/data_store.jsonだけを使用する。
     """
-    normalized = unicodedata.normalize("NFKC", str(shop_name or ""))
-    normalized = " ".join(normalized.strip().split())
-    return normalized.casefold()
-
-
-def find_users_by_shop_name(users_data, shop_name):
-    """既存形式（メールアドレスをキーにしたusers.json）にも対応して検索する。"""
-    target = normalize_shop_name(shop_name)
-    if not target:
-        return []
-
-    matches = []
-    for user in users_data.get("users", {}).values():
-        if not isinstance(user, dict):
-            continue
-        if normalize_shop_name(user.get("shop_name", "")) == target:
-            matches.append(user)
-    return matches
-
-
-def farm_account_key(shop_name):
-    """users.json内で農園アカウントを保存する安定したキーを返す。"""
-    normalized = normalize_shop_name(shop_name)
-    digest = hashlib.sha256(normalized.encode("utf-8")).hexdigest()[:16]
-    return f"farm_{digest}"
-
-
-def hash_password(password, salt=None):
-    salt = salt or uuid.uuid4().hex
-    digest = hashlib.sha256((salt + str(password)).encode("utf-8")).hexdigest()
-    return f"{salt}${digest}"
-
-
-def verify_password(password, stored_hash):
-    try:
-        salt, digest = str(stored_hash).split("$", 1)
-    except ValueError:
-        return False
-    return hash_password(password, salt) == stored_hash
-
-
-def is_logged_in():
-    return bool(session.get("shop_id") and session.get("shop_name"))
-
-
-def current_user_context():
-    return {
-        "email": session.get("user_email", ""),
-        "manager_name": session.get("manager_name", ""),
-        "shop_id": session.get("shop_id", ""),
-        "shop_name": session.get("shop_name", ""),
-    }
-
-
-@app.before_request
-def prepare_shop_context():
-    allowed_endpoints = {"login", "register", "static"}
-    if request.endpoint in allowed_endpoints:
-        return None
-
-    if not is_logged_in():
-        if request.path.startswith("/api/"):
-            return jsonify({
-                "status": "error",
-                "message": "ログインが必要です。"
-            }), 401
-        return redirect(url_for("login"))
-
-    set_current_shop_id(session.get("shop_id"))
-    load_web_store()
-    return None
-
-
-@app.route("/register", methods=["GET", "POST"])
-def register():
-    if request.method == "GET":
-        return render_template("register.html")
-
-    shop_name = str(request.form.get("shop_name", "") or "").strip()
-    manager_name = str(request.form.get("manager_name", "") or "").strip()
-    email = str(request.form.get("email", "") or "").strip().lower()
-    password = str(request.form.get("password", "") or "")
-
-    if not shop_name or not manager_name or not email or not password:
-        return render_template("register.html", error="農園名、管理者名、通知先メールアドレス、パスワードを入力してください。")
-
-    users_data = load_users()
-    existing_farms = find_users_by_shop_name(users_data, shop_name)
-    if existing_farms:
-        return render_template(
-            "register.html",
-            error="この農園名はすでに登録されています。ログイン画面から農園名でログインしてください。",
-        )
-
-    # 1農園につき1つのshop_idを発行し、在庫・売上・通知履歴を農園単位で分離する。
-    shop_id = f"shop_{uuid.uuid4().hex[:10]}"
-    account_key = farm_account_key(shop_name)
-    users_data["users"][account_key] = {
-        "email": email,
-        "password_hash": hash_password(password),
-        "manager_name": manager_name,
-        "shop_name": shop_name,
-        "shop_name_normalized": normalize_shop_name(shop_name),
-        "shop_id": shop_id,
-        "created_at": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-    }
-    save_users(users_data)
-
-    # 新規販売所用のデータファイルを作成する。
-    # 初回登録で入力したログイン用メールアドレスを、そのまま初期通知先として自動登録する。
-    # そのため、利用者は設定画面で別途メールアドレスを登録しなくても通知を受け取れる。
-    set_current_shop_id(shop_id)
-    load_web_store()
-    save_line_recipient({
-        "name": manager_name,
-        "email": email,
-        "enabled": True,
-        "purchase_notice": True,
-        "theft_notice": True,
-        "video_notice": True,
-        "system_notice": True,
-    })
-    show_current_product_from_store()
-
-    session.clear()
-    session["user_email"] = email
-    session["manager_name"] = manager_name
-    session["shop_name"] = shop_name
-    session["shop_id"] = shop_id
-    return redirect(url_for("index"))
-
-
-@app.route("/login", methods=["GET", "POST"])
-def login():
-    if request.method == "GET":
-        return render_template("login.html")
-
-    shop_name = str(request.form.get("shop_name", "") or "").strip()
-    password = str(request.form.get("password", "") or "")
-    users_data = load_users()
-    matches = find_users_by_shop_name(users_data, shop_name)
-
-    if not matches:
-        return render_template("login.html", error="農園名またはパスワードが違います。")
-
-    # 旧版で同じ農園名を複数メールアドレスから登録していた場合、
-    # どのshop_idを使うか一意に決められないため、安全のためログインを止める。
-    distinct_shop_ids = {
-        str(user.get("shop_id", "") or "").strip()
-        for user in matches
-        if str(user.get("shop_id", "") or "").strip()
-    }
-    if len(distinct_shop_ids) > 1:
-        return render_template(
-            "login.html",
-            error="同じ農園名の登録が複数あります。管理者にデータ統合を依頼してください。",
-        )
-
-    user = next(
-        (
-            candidate
-            for candidate in matches
-            if verify_password(password, candidate.get("password_hash", ""))
-        ),
-        None,
-    )
-    if not user:
-        return render_template("login.html", error="農園名またはパスワードが違います。")
-
-    session.clear()
-    session["user_email"] = user.get("email", "")
-    session["manager_name"] = user.get("manager_name", "")
-    session["shop_name"] = user.get("shop_name", shop_name)
-    session["shop_id"] = user.get("shop_id", "")
-
-    set_current_shop_id(session.get("shop_id"))
-    load_web_store()
-    show_current_product_from_store()
-    return redirect(url_for("index"))
-
-
-@app.route("/logout")
-def logout():
-    session.clear()
-    return redirect(url_for("login"))
-
-
-def initialize_background_shop_context():
-    """バックグラウンド監視が参照する販売所データを初期化する。
-
-    FlaskのsessionはHTTPリクエスト内でしか使えないため、起動直後の監視
-    スレッドはログイン中の販売所を取得できない。登録販売所が1つだけなら、
-    その販売所を監視対象として自動選択する。
-    """
-    users = load_users().get("users", {})
-    shop_ids = sorted({
-        str(user.get("shop_id", "") or "").strip()
-        for user in users.values()
-        if isinstance(user, dict) and str(user.get("shop_id", "") or "").strip()
-    })
-
-    if len(shop_ids) != 1:
-        print(
-            "メール通知用の販売所を自動選択できません。",
-            f"登録販売所数={len(shop_ids)}"
-        )
-        return False
-
-    shop_id = shop_ids[0]
-    set_current_shop_id(shop_id)
     load_web_store()
     recipients = get_line_settings().get("recipients", [])
     print(
-        "メール通知用の販売所を設定しました:",
-        shop_id,
-        f"通知先={len(recipients)}件"
+        "単一端末モードでWeb管理画面を初期化しました。",
+        f"メール通知先={len(recipients)}件"
     )
     return True
 
@@ -1036,7 +796,7 @@ def process_session_path(session_path, ignore_stability=False, force_reprocess=F
     line_results = []
 
     # 通知先が読み込まれていない状態で在庫・履歴を更新して処理済みにすると、
-    # 後からログインしてもメールを再送できない。処理前に通知先を確認する。
+    # 後から通知先を登録してもメールを再送できないため、処理前に通知先を確認する。
     video_path = None
     if judgement == "normal":
         required_notice_type = "purchase"
@@ -1375,7 +1135,6 @@ def index():
         sales_history=get_sales_history(),
         notification_history=get_notification_history(),
         line_settings=get_line_settings(),
-        current_user=current_user_context(),
     )
 
 
@@ -1396,9 +1155,7 @@ def api_dashboard_data():
     管理画面の更新に必要なデータをまとめて返すAPI。
 
     以前は refreshAll() で複数APIを同時に呼び出していたため、
-    複数販売所対応後のグローバルな保存先切替と競合し、
-    まれに在庫データが空で保存される可能性があった。
-    このAPIでは1リクエスト内で同じshop_idのデータをまとめて返す。
+    管理画面の更新に必要なデータを1回のリクエストでまとめて返す。
     """
     return jsonify({
         "status": "success",
@@ -1832,9 +1589,8 @@ if __name__ == "__main__":
     setup_hardware()
     show_current_product_from_config()
 
-    # バックグラウンド監視はFlaskのログインsessionを直接参照できないため、
-    # 単一販売所の場合は起動時に通知設定を明示的に読み込む。
-    initialize_background_shop_context()
+    # 1台のRaspberry Piを1販売所として扱い、共通データを読み込む。
+    initialize_single_device_store()
 
     # 起動時に sessions フォルダの内容を基準にWeb履歴を復元する
     sync_web_histories_from_sessions()

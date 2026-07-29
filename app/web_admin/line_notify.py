@@ -26,8 +26,8 @@ except Exception:
 # Gmailを使う場合、SMTP_PASSWORD には通常のログインパスワードではなく
 # Googleアカウントで発行した「アプリパスワード」を入力してください。
 # GitHubなどへ公開する場合は、本物のメールアドレスやパスワードを消してください。
-SMTP_USERNAME = "sohutoweakogaku5@gmail.com"          # 例: "your_account@gmail.com"
-SMTP_PASSWORD = "eera twcd hlyy pmop"          # 例: Gmailのアプリパスワード
+SMTP_USERNAME = ""          # 環境変数SMTP_USERNAMEを推奨
+SMTP_PASSWORD = ""          # 環境変数SMTP_PASSWORDを推奨
 SMTP_FROM_ADDRESS = ""      # 空の場合はSMTP_USERNAMEを使用
 SENDER_NAME = "無人販売支援システム"
 

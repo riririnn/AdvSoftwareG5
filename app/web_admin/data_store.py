@@ -2,6 +2,8 @@ from datetime import datetime
 from pathlib import Path
 import json
 import importlib.util
+import os
+import shutil
 
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -14,33 +16,60 @@ RUNTIME_STORE_DIR.mkdir(parents=True, exist_ok=True)
 # config.py ではなく git管理外のこのファイルを読み書きする。
 PRODUCT_SETTINGS_PATH = BASE_DIR.parent / "product_settings.py"
 
-# Web管理画面用の保存ファイル
-# 単独利用時は従来どおり runtime/web_admin/data_store.json を使う。
-# 複数販売所利用時は set_current_shop_id() により runtime/web_admin/shop_data/<shop_id>.json に切り替える。
-DEFAULT_DATA_STORE_PATH = RUNTIME_STORE_DIR / "data_store.json"
-SHOP_DATA_DIR = RUNTIME_STORE_DIR / "shop_data"
-SHOP_DATA_DIR.mkdir(parents=True, exist_ok=True)
-DATA_STORE_PATH = DEFAULT_DATA_STORE_PATH
-CURRENT_SHOP_ID = None
+# Web管理画面用の保存ファイル。
+# 1台のRaspberry Piを1販売所として扱うため、常にこの1ファイルを使う。
+DATA_STORE_PATH = RUNTIME_STORE_DIR / "data_store.json"
+
+# ログイン・複数販売所版で使用していた旧保存先。
+# 初回起動時にdata_store.jsonが無い場合だけ、既存データを自動移行する。
+LEGACY_SHOP_DATA_DIR = RUNTIME_STORE_DIR / "shop_data"
 
 
-def sanitize_shop_id(shop_id):
-    shop_id = str(shop_id or "").strip()
-    safe = "".join(ch for ch in shop_id if ch.isalnum() or ch in ["_", "-"])
-    return safe or "default"
+def migrate_legacy_shop_store_if_needed():
+    """旧shop_data/*.jsonから単一端末用data_store.jsonへ移行する。
 
+    権限や所有者は変更せず、JSONファイルをコピーするだけにする。
+    複数候補がある場合は環境変数LEGACY_SHOP_DATA_FILEで指定できる。
+    未指定時は最終更新日時が最も新しいファイルを採用する。
+    """
+    if DATA_STORE_PATH.exists():
+        return None
 
-def set_current_shop_id(shop_id):
-    """ログイン中の販売所IDに応じて保存先JSONを切り替える。"""
-    global DATA_STORE_PATH, CURRENT_SHOP_ID
-    safe_shop_id = sanitize_shop_id(shop_id)
-    CURRENT_SHOP_ID = safe_shop_id
-    DATA_STORE_PATH = SHOP_DATA_DIR / f"{safe_shop_id}.json"
-    return DATA_STORE_PATH
+    override = str(os.getenv("LEGACY_SHOP_DATA_FILE", "") or "").strip()
+    source = None
 
+    if override:
+        candidate = Path(override).expanduser()
+        if candidate.exists() and candidate.is_file():
+            source = candidate
+        else:
+            print("旧販売所データの指定ファイルが見つかりません:", candidate)
 
-def get_current_shop_id():
-    return CURRENT_SHOP_ID
+    if source is None and LEGACY_SHOP_DATA_DIR.exists():
+        candidates = [
+            path for path in LEGACY_SHOP_DATA_DIR.glob("*.json")
+            if path.is_file()
+        ]
+        if candidates:
+            source = max(candidates, key=lambda path: path.stat().st_mtime)
+            if len(candidates) > 1:
+                print(
+                    "旧販売所データが複数あるため、最終更新が最も新しいファイルを移行します:",
+                    source,
+                )
+
+    if source is None:
+        return None
+
+    try:
+        DATA_STORE_PATH.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(source, DATA_STORE_PATH)
+    except OSError as error:
+        print("旧販売所データの移行に失敗しました:", source, error)
+        return None
+
+    print("旧販売所データを単一端末用へ移行しました:", source, "->", DATA_STORE_PATH)
+    return source
 
 
 products = {}
@@ -590,6 +619,8 @@ def normalize_inventory(raw_inventory, current_products):
 # ==========================================
 
 def load_web_store():
+    migrate_legacy_shop_store_if_needed()
+
     global products, inventory, weight_sensor_count, weight_sensor_targets, line_settings
     global sales_history, notification_history, ai_history
 

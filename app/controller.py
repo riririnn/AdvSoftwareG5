@@ -690,7 +690,12 @@ class _LivePaymentMonitor:
                                 0.0, current_coin_weight - self.before_coin_weight
                             )
                             coin_weight_diff = actual_increase - expected_coin_weight
-                            new_coin_weight_ok = abs(coin_weight_diff) <= COIN_WEIGHT_MARGIN
+                            # コインが1枚も投入されていない間は、想定重量・実測増加が
+                            # どちらも0gで「一致」扱いになってしまうため、Trueにしない。
+                            new_coin_weight_ok = (
+                                bool(self._paid_coins)
+                                and abs(coin_weight_diff) <= COIN_WEIGHT_MARGIN
+                            )
 
                             if self._paid_coins and new_coin_weight_ok != self._coin_weight_ok:
                                 print(

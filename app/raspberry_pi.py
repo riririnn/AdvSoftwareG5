@@ -296,6 +296,30 @@ def get_vegetable_weight():
         return _convert_vegetable_raw_to_grams(vege_raw)
 
 
+def get_coin_weight():
+    """
+    コイン用ロードセルだけを読み取る。
+
+    来客中のライブ判定で、コイン投入の画像認識結果を重量面からも
+    検証するために使う。get_weights()より短時間・低負荷で
+    現在のコイン重量を取得する。
+    """
+    with _sensor_lock:
+        if not _ensure_sensor_state():
+            return float(random.randint(900, 1000))
+
+        with _realtime_priority():
+            coin_raw = _read_raw_mean(_hx_coin, SAMPLES_PER_READ)
+
+        if coin_raw is None:
+            raise WeightReadError(
+                "コイン用センサーから有効な値を取得できませんでした"
+            )
+
+        coin_weight = (coin_raw - _coin_offset) / COIN_SCALE_RATIO
+        return round(max(coin_weight, 0.0), 1)
+
+
 def get_weights():
     """
     ラズパイから重量情報を取得

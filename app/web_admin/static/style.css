@@ -212,7 +212,7 @@ button { cursor: pointer; }
 .card-header {
     display: flex;
     align-items: center;
-    justify-content: space-between;
+    justify-content: flex-start;
     gap: 16px;
     margin-bottom: 18px;
 }
@@ -869,14 +869,6 @@ button { cursor: pointer; }
 .shop-title-card h2 {
     margin: 0;
     font-size: 24px;
-}
-
-.shop-title-card span {
-    background: rgba(255, 255, 255, 0.18);
-    border: 1px solid rgba(255, 255, 255, 0.28);
-    border-radius: 999px;
-    padding: 8px 12px;
-    font-weight: 800;
 }
 
 @media (max-width: 900px) {

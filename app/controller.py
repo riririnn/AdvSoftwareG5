@@ -534,6 +534,11 @@ class _LivePaymentMonitor:
         with self._lock:
             return self._item_taken
 
+    def is_image_payment_confirmed(self) -> bool:
+        """STEP2: 画像認識による支払い確認が完了したか。"""
+        with self._lock:
+            return self._image_payment_confirmed
+
     def is_transaction_confirmed(self) -> bool:
         """STEP4: 重量判定による取引確定が完了したか。"""
         with self._lock:
@@ -544,8 +549,8 @@ class _LivePaymentMonitor:
             return
 
         with self._lock:
-            if not self._item_taken or self._transaction_confirmed:
-                # STEP1(商品を取る)が終わっていない、またはSTEP4まで完了済みの
+            if not self._item_taken or self._image_payment_confirmed:
+                # STEP1(商品を取る)が終わっていない、またはSTEP2まで完了済みの
                 # 場合は、コイン投入を受け付けない
                 # （商品を取る→支払う→重量判定、の順番を守るため）。
                 return
@@ -567,7 +572,7 @@ class _LivePaymentMonitor:
             return
 
         with self._lock:
-            if not self._item_taken or self._transaction_confirmed:
+            if not self._item_taken or self._image_payment_confirmed:
                 return
 
             self._paid_amount = max(0, self._paid_amount - sum(int(coin) for coin in coins))
@@ -918,20 +923,21 @@ class Controller:
                 # -------------------------
                 # コイン認識
                 # （商品を取る(STEP1)より前はコイン認識を行わない。
-                #   支払った金額と重量減少分の一致が確定(STEP3)したら、
-                #   コインカメラの呼び出し自体を止める。CPU負荷軽減も兼ねる。）
+                #   画像認識で支払いを確認できたら(STEP2)、それ以降は画像認識を
+                #   やり直さず、コインカメラの呼び出し自体を止める。
+                #   CPU負荷軽減も兼ねる。）
                 # -------------------------
 
                 item_taken = (
                     self.payment_monitor is not None
                     and self.payment_monitor.is_item_taken()
                 )
-                transaction_confirmed = (
+                image_payment_confirmed = (
                     self.payment_monitor is not None
-                    and self.payment_monitor.is_transaction_confirmed()
+                    and self.payment_monitor.is_image_payment_confirmed()
                 )
 
-                if item_taken and not transaction_confirmed:
+                if item_taken and not image_payment_confirmed:
                     new_coins, removed_coins = detect_coin()
 
                     for coin in new_coins:

@@ -448,15 +448,15 @@ def reset_coin_tracking():
 def _calculate_live_purchase_amount(
     before_vegetable_weight: float,
     current_vegetable_weight: float,
-) -> tuple[int, bool]:
+) -> tuple[int, bool, float, float]:
     """
     重量減少から、現在支払うべき金額と、重量判定が確定できたかを
     最終判定と同じ方式で計算する。
 
     Returns
     -------
-    tuple(int, bool)
-        (支払うべき金額, 重量判定が確定できたか)
+    tuple(int, bool, float, float)
+        (支払うべき金額, 重量判定が確定できたか, 減少重量g, 丸め誤差g)
         重量判定は「1個以上減っている」かつ「丸め誤差が
         VEGETABLE_WEIGHT_MARGIN以内」の場合にTrueとなる。
     """
@@ -464,10 +464,10 @@ def _calculate_live_purchase_amount(
         unit_weight = float(VEGETABLE_WEIGHTS[TARGET_VEGETABLE])
         unit_price = int(VEGETABLE_PRICES[TARGET_VEGETABLE])
     except (KeyError, TypeError, ValueError):
-        return 0, False
+        return 0, False, 0.0, 0.0
 
     if unit_weight <= 0 or unit_price < 0:
-        return 0, False
+        return 0, False, 0.0, 0.0
 
     decreased_weight = max(
         0.0,
@@ -477,7 +477,7 @@ def _calculate_live_purchase_amount(
     rounding_error = abs(decreased_weight - (estimated_count * unit_weight))
     weight_judged = estimated_count > 0 and rounding_error <= VEGETABLE_WEIGHT_MARGIN
 
-    return int(estimated_count * unit_price), weight_judged
+    return int(estimated_count * unit_price), weight_judged, decreased_weight, rounding_error
 
 
 class _LivePaymentMonitor:
@@ -589,10 +589,21 @@ class _LivePaymentMonitor:
         while not self._stop_event.wait(PAYMENT_LED_UPDATE_INTERVAL):
             try:
                 current_weight = get_vegetable_weight()
-                required, weight_judged = _calculate_live_purchase_amount(
-                    self.before_vegetable_weight,
-                    current_weight,
+                required, weight_judged, decreased_weight, rounding_error = (
+                    _calculate_live_purchase_amount(
+                        self.before_vegetable_weight,
+                        current_weight,
+                    )
                 )
+
+                # 重量が減っているのに判定が確定しない場合の原因調査用ログ。
+                if decreased_weight > 0 and not weight_judged:
+                    print(
+                        "[Controller] 重量判定デバッグ: "
+                        f"減少重量={decreased_weight:.1f}g / "
+                        f"丸め誤差={rounding_error:.1f}g "
+                        f"(許容={VEGETABLE_WEIGHT_MARGIN}g) / 判定OK=False"
+                    )
 
                 with self._lock:
                     if not self._transaction_confirmed:

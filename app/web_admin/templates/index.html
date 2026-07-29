@@ -267,6 +267,7 @@
                             <div class="notice-check-grid compact">
                                 <label class="checkbox-line"><input id="purchaseNotice" type="checkbox" checked />購入通知を送る</label>
                                 <label class="checkbox-line"><input id="theftNotice" type="checkbox" checked />万引き通知を送る</label>
+                                <label class="checkbox-line"><input id="systemNotice" type="checkbox" checked />判定エラー通知を送る</label>
                             </div>
 
                             <button class="primary-button" type="submit">通知先を保存</button>
@@ -786,6 +787,7 @@ function renderLineSettings() {
             <div class="recipient-flags">
                 ${recipient.purchase_notice ? '<span class="type-badge blue">購入</span>' : ''}
                 ${recipient.theft_notice ? '<span class="type-badge orange">万引き</span>' : ''}
+                ${recipient.system_notice ? '<span class="type-badge green">エラー</span>' : ''}
             </div>
             <button class="outline-red" type="button" onclick="deleteLineRecipient('${escapeAttr(recipient.email)}')">削除</button>
         </article>
@@ -896,7 +898,8 @@ document.getElementById('lineRecipientForm').addEventListener('submit', async (e
         name: document.getElementById('lineRecipientName').value,
         email: document.getElementById('lineEmail').value,
         purchase_notice: document.getElementById('purchaseNotice').checked,
-        theft_notice: document.getElementById('theftNotice').checked
+        theft_notice: document.getElementById('theftNotice').checked,
+        system_notice: document.getElementById('systemNotice').checked
     };
 
     try {
@@ -907,6 +910,7 @@ document.getElementById('lineRecipientForm').addEventListener('submit', async (e
         document.getElementById('lineRecipientForm').reset();
         document.getElementById('purchaseNotice').checked = true;
         document.getElementById('theftNotice').checked = true;
+        document.getElementById('systemNotice').checked = true;
         state.lineSettings = result.settings || state.lineSettings;
         renderLineSettings();
         showToast(result.message || 'メール通知先を保存しました。');

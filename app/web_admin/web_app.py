@@ -808,6 +808,19 @@ def process_session_path(session_path, ignore_stability=False, force_reprocess=F
             "session_id": session_id
         }
 
+    total_decreased_quantity = sum(int(quantity or 0) for quantity in decreased_items.values())
+
+    if judgement == "normal" and total_decreased_quantity <= 0:
+        # 何も取らず・買わずに立ち去った(通り過ぎただけ)場合は通知しない。
+        processed_session_ids.add(session_id)
+        save_processed_session_ids()
+
+        return {
+            "status": "skipped",
+            "message": "商品を取っていないため通知は送信しません。",
+            "session_id": session_id
+        }
+
     items_text = build_items_text(decreased_items)
     line_results = []
 

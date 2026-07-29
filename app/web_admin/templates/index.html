@@ -235,6 +235,24 @@
                         </form>
                     </section>
 
+                    <section class="card settings-card history-settings-card">
+                        <div class="card-header">
+                            <div>
+                                <span class="section-icon">🗑</span>
+                                <h2>通知履歴の自動削除</h2>
+                            </div>
+                        </div>
+
+                        <form id="historySettingsForm" class="product-form">
+                            <label>
+                                保存日数（日）
+                                <input id="notificationRetentionInput" type="number" min="0" step="1" placeholder="例）30" required />
+                            </label>
+                            <small class="form-help">指定した日数より古い通知履歴を自動で削除します。ラズパイの容量圧迫を防ぎます。0を指定すると自動削除しません。</small>
+                            <button class="primary-button" type="submit">保存日数を保存</button>
+                        </form>
+                    </section>
+
                     <section class="card settings-card recipient-form-card">
                         <div class="card-header">
                             <div>
@@ -338,6 +356,7 @@ const state = {
     weightSensors: { weight_sensor_count: 1, weight_sensor_targets: {} },
     lineSettings: { line_enabled: true, recipients: [] },
     storeSettings: { farm_name: 'このRaspberry Piの無人販売所' },
+    historySettings: { notification_retention_days: 30 },
     notificationFilter: 'all'
 };
 
@@ -394,6 +413,7 @@ async function refreshAll(options = {}) {
         state.weightSensors = data.weightSensors || { weight_sensor_count: 1, weight_sensor_targets: {} };
         state.lineSettings = data.lineSettings || { line_enabled: true, recipients: [] };
         state.storeSettings = data.storeSettings || { farm_name: 'このRaspberry Piの無人販売所' };
+        state.historySettings = data.historySettings || { notification_retention_days: 30 };
 
         renderAll();
         if (options.toast) showToast('最新の情報に更新しました。');
@@ -410,6 +430,7 @@ function renderAll() {
     renderWeightSensors();
     renderNotifications();
     renderStoreSettings();
+    renderHistorySettings();
     renderLineSettings();
 }
 
@@ -808,6 +829,16 @@ function renderStoreSettings() {
 }
 
 
+function renderHistorySettings() {
+    const settings = state.historySettings || { notification_retention_days: 30 };
+    const input = document.getElementById('notificationRetentionInput');
+
+    if (input && document.activeElement !== input) {
+        input.value = Number(settings.notification_retention_days ?? 30);
+    }
+}
+
+
 function renderLineSettings() {
     const list = document.getElementById('lineRecipientList');
 
@@ -901,6 +932,27 @@ document.getElementById('farmNameForm').addEventListener('submit', async (event)
         state.storeSettings = result.settings || state.storeSettings;
         renderStoreSettings();
         showToast(result.message || '農園名を保存しました。');
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
+});
+
+
+document.getElementById('historySettingsForm').addEventListener('submit', async (event) => {
+    event.preventDefault();
+
+    const days = Number(document.getElementById('notificationRetentionInput').value);
+
+    try {
+        const result = await apiJson('/api/history_settings', {
+            method: 'POST',
+            body: JSON.stringify({ notification_retention_days: days })
+        });
+        state.historySettings = result.settings || state.historySettings;
+        if (result.notifications) state.notifications = result.notifications;
+        renderHistorySettings();
+        renderAll();
+        showToast(result.message || '保存日数を保存しました。');
     } catch (error) {
         showToast(error.message, 'error');
     }

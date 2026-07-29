@@ -39,6 +39,9 @@ try:
         get_line_settings,
         get_store_settings,
         set_farm_name,
+        get_history_settings,
+        set_notification_retention_days,
+        purge_expired_notification_history,
         set_line_enabled,
         save_line_recipient,
         delete_line_recipient,
@@ -73,6 +76,9 @@ except ImportError:
         get_line_settings,
         get_store_settings,
         set_farm_name,
+        get_history_settings,
+        set_notification_retention_days,
+        purge_expired_notification_history,
         set_line_enabled,
         save_line_recipient,
         delete_line_recipient,
@@ -1115,7 +1121,12 @@ def sync_web_histories_from_sessions():
     }
 
 
+PURGE_INTERVAL_SEC = 3600  # 通知履歴の自動削除チェック間隔（1時間）
+_last_purge_time = 0.0
+
+
 def watch_sessions_loop():
+    global _last_purge_time
     print("sessions自動監視を開始しました:", SESSIONS_DIR)
 
     while True:
@@ -1127,6 +1138,10 @@ def watch_sessions_loop():
                     print("session自動取込完了:", result.get("session_id"), result.get("judgement"))
                 elif result.get("status") == "error":
                     print("session自動取込エラー:", result)
+
+            if time.time() - _last_purge_time >= PURGE_INTERVAL_SEC:
+                purge_expired_notification_history()
+                _last_purge_time = time.time()
 
         except Exception as error:
             print("sessions監視中にエラーが発生しました:", error)
@@ -1179,6 +1194,7 @@ def api_dashboard_data():
         "weightSensors": get_weight_sensor_settings(),
         "lineSettings": get_line_settings(),
         "storeSettings": get_store_settings(),
+        "historySettings": get_history_settings(),
     })
 
 
@@ -1518,6 +1534,45 @@ def api_store_settings():
         "status": "success",
         "message": "農園名を保存しました。",
         "settings": get_store_settings()
+    })
+
+
+@app.route("/api/history_settings", methods=["GET", "POST"])
+def api_history_settings():
+    """通知履歴の自動削除設定（保存日数）を取得・保存する。"""
+    if request.method == "GET":
+        return jsonify({
+            "status": "success",
+            "settings": get_history_settings()
+        })
+
+    data = request.json or {}
+
+    try:
+        retention_days = int(data.get("notification_retention_days", ""))
+    except Exception:
+        return jsonify({
+            "status": "error",
+            "message": "保存日数は整数で入力してください。"
+        }), 400
+
+    if retention_days < 0:
+        return jsonify({
+            "status": "error",
+            "message": "保存日数は0以上で入力してください。"
+        }), 400
+
+    if not set_notification_retention_days(retention_days):
+        return jsonify({
+            "status": "error",
+            "message": "通知履歴の自動削除設定を保存できませんでした。"
+        }), 500
+
+    return jsonify({
+        "status": "success",
+        "message": "通知履歴の自動削除設定を保存しました。",
+        "settings": get_history_settings(),
+        "notifications": get_notification_history()
     })
 
 

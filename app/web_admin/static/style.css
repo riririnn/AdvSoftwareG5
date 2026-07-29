@@ -683,6 +683,7 @@ button { cursor: pointer; }
     grid-template-columns: minmax(520px, 0.95fr) minmax(420px, 1.05fr);
     grid-template-areas:
         "farm form"
+        "history form"
         "list form";
     gap: 22px;
     align-items: start;
@@ -693,6 +694,7 @@ button { cursor: pointer; }
 }
 
 .farm-name-card { grid-area: farm; }
+.history-settings-card { grid-area: history; }
 .recipient-form-card { grid-area: form; }
 .recipient-list-card { grid-area: list; }
 
@@ -787,6 +789,7 @@ button { cursor: pointer; }
         grid-template-columns: 1fr;
         grid-template-areas:
             "farm"
+            "history"
             "form"
             "list";
     }
@@ -805,6 +808,7 @@ button { cursor: pointer; }
         grid-template-columns: 1fr;
         grid-template-areas:
             "farm"
+            "history"
             "form"
             "list";
     }

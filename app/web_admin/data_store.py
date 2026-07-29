@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 import json
 import importlib.util
@@ -94,6 +94,14 @@ line_settings = {
 # ログインや複数販売所切替には使用せず、管理画面上の表示名としてのみ使用する。
 store_settings = {
     "farm_name": "このRaspberry Piの無人販売所"
+}
+
+# 通知履歴の自動削除設定。
+# ラズパイの容量を圧迫しないよう、一定日数より古い通知履歴は自動で削除する。
+# 0以下を指定すると自動削除を無効化する。
+DEFAULT_NOTIFICATION_RETENTION_DAYS = 30
+history_settings = {
+    "notification_retention_days": DEFAULT_NOTIFICATION_RETENTION_DAYS
 }
 
 
@@ -629,7 +637,7 @@ def load_web_store():
     migrate_legacy_shop_store_if_needed()
 
     global products, inventory, weight_sensor_count, weight_sensor_targets, line_settings, store_settings
-    global sales_history, notification_history, ai_history
+    global sales_history, notification_history, ai_history, history_settings
 
     if not DATA_STORE_PATH.exists():
         load_from_config_py()
@@ -683,6 +691,9 @@ def load_web_store():
 
         line_settings = normalize_line_settings(data.get("line_settings", {}))
         store_settings = normalize_store_settings(data.get("store_settings", {}))
+        history_settings = normalize_history_settings(data.get("history_settings", {}))
+
+        purge_expired_notification_history()
 
         save_web_store()
 
@@ -697,6 +708,7 @@ def load_web_store():
         ai_history = []
         line_settings = {"line_enabled": True, "recipients": []}
         store_settings = {"farm_name": "このRaspberry Piの無人販売所"}
+        history_settings = {"notification_retention_days": DEFAULT_NOTIFICATION_RETENTION_DAYS}
         save_web_store()
 
     except Exception as error:
@@ -710,6 +722,7 @@ def load_web_store():
         ai_history = []
         line_settings = {"line_enabled": True, "recipients": []}
         store_settings = {"farm_name": "このRaspberry Piの無人販売所"}
+        history_settings = {"notification_retention_days": DEFAULT_NOTIFICATION_RETENTION_DAYS}
         save_web_store()
 
 
@@ -723,7 +736,8 @@ def save_web_store():
         "notification_history": notification_history,
         "ai_history": ai_history,
         "line_settings": line_settings,
-        "store_settings": store_settings
+        "store_settings": store_settings,
+        "history_settings": history_settings
     }
 
     with open(DATA_STORE_PATH, "w", encoding="utf-8") as f:
@@ -1052,6 +1066,93 @@ def set_farm_name(farm_name):
     store_settings = {"farm_name": farm_name[:60]}
     save_web_store()
     return True
+
+
+# ==========================================
+# 通知履歴の自動削除設定
+# ==========================================
+
+def normalize_history_settings(raw_settings):
+    """通知履歴の自動削除設定を安全な形式へ正規化する。"""
+    if not isinstance(raw_settings, dict):
+        raw_settings = {}
+
+    try:
+        retention_days = int(raw_settings.get("notification_retention_days", DEFAULT_NOTIFICATION_RETENTION_DAYS))
+    except Exception:
+        retention_days = DEFAULT_NOTIFICATION_RETENTION_DAYS
+
+    # 0以下は無効化（自動削除しない）とみなす。
+    if retention_days < 0:
+        retention_days = 0
+
+    return {"notification_retention_days": retention_days}
+
+
+def get_history_settings():
+    global history_settings
+    history_settings = normalize_history_settings(history_settings)
+    return dict(history_settings)
+
+
+def set_notification_retention_days(days):
+    """通知履歴の保存日数を設定する。0を指定すると自動削除を無効化する。"""
+    global history_settings
+
+    try:
+        days = int(days)
+    except Exception:
+        return False
+
+    if days < 0:
+        return False
+
+    history_settings = {"notification_retention_days": days}
+    save_web_store()
+    purge_expired_notification_history()
+    return True
+
+
+def purge_expired_notification_history():
+    """保存日数を過ぎた通知履歴を自動で削除する。
+
+    ラズパイの容量を圧迫し続けないよう、設定日数より古い通知履歴を削除する。
+    notification_retention_daysが0の場合は削除しない。
+    """
+    global notification_history
+
+    settings = normalize_history_settings(history_settings)
+    retention_days = settings.get("notification_retention_days", DEFAULT_NOTIFICATION_RETENTION_DAYS)
+
+    if retention_days <= 0:
+        return False
+
+    cutoff = datetime.now() - timedelta(days=retention_days)
+    before = len(notification_history)
+    kept = []
+
+    for record in notification_history:
+        if not isinstance(record, dict):
+            continue
+
+        try:
+            record_time = datetime.strptime(record.get("time", ""), "%Y/%m/%d %H:%M:%S")
+        except Exception:
+            # 時刻が読み取れない古い形式のデータは、念のため残しておく。
+            kept.append(record)
+            continue
+
+        if record_time >= cutoff:
+            kept.append(record)
+
+    notification_history = kept
+
+    if len(notification_history) != before:
+        save_web_store()
+        print(f"通知履歴の自動削除: {before - len(notification_history)}件を削除しました（保存期間 {retention_days}日）")
+        return True
+
+    return False
 
 
 # ==========================================

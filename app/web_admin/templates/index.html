@@ -238,10 +238,10 @@
 
                         <form id="historySettingsForm" class="product-form">
                             <label>
-                                sessionsフォルダの保存日数（日）
+                                通知履歴の保存期間（日）
                                 <input id="sessionRetentionInput" type="number" min="0" step="1" placeholder="例）30" required />
                             </label>
-                            <small class="form-help">指定した日数より古いsessionフォルダ（動画・画像・CSVなど）を自動で削除します。ラズパイの容量圧迫を防ぎます。通知処理が済んでいないセッションは削除しません。0を指定すると自動削除しません。</small>
+                            <small class="form-help">指定した日数より古い通知履歴（動画・画像・CSVなどの証拠データを含む）を自動で削除します。ラズパイの容量圧迫を防ぎます。まだ通知（メール送信）が完了していない履歴は削除しません。0を指定すると自動削除しません。</small>
 
                             <button class="primary-button" type="submit">保存日数を保存</button>
                         </form>

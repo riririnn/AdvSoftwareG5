@@ -96,12 +96,14 @@ store_settings = {
     "farm_name": "このRaspberry Piの無人販売所"
 }
 
-# 通知履歴の自動削除設定。
-# ラズパイの容量を圧迫しないよう、一定日数より古い通知履歴は自動で削除する。
+# 通知履歴・sessionsフォルダの自動削除設定。
+# ラズパイの容量を圧迫しないよう、一定日数より古いものは自動で削除する。
 # 0以下を指定すると自動削除を無効化する。
 DEFAULT_NOTIFICATION_RETENTION_DAYS = 30
+DEFAULT_SESSION_RETENTION_DAYS = 30
 history_settings = {
-    "notification_retention_days": DEFAULT_NOTIFICATION_RETENTION_DAYS
+    "notification_retention_days": DEFAULT_NOTIFICATION_RETENTION_DAYS,
+    "session_retention_days": DEFAULT_SESSION_RETENTION_DAYS,
 }
 
 
@@ -708,7 +710,10 @@ def load_web_store():
         ai_history = []
         line_settings = {"line_enabled": True, "recipients": []}
         store_settings = {"farm_name": "このRaspberry Piの無人販売所"}
-        history_settings = {"notification_retention_days": DEFAULT_NOTIFICATION_RETENTION_DAYS}
+        history_settings = {
+            "notification_retention_days": DEFAULT_NOTIFICATION_RETENTION_DAYS,
+            "session_retention_days": DEFAULT_SESSION_RETENTION_DAYS,
+        }
         save_web_store()
 
     except Exception as error:
@@ -722,7 +727,10 @@ def load_web_store():
         ai_history = []
         line_settings = {"line_enabled": True, "recipients": []}
         store_settings = {"farm_name": "このRaspberry Piの無人販売所"}
-        history_settings = {"notification_retention_days": DEFAULT_NOTIFICATION_RETENTION_DAYS}
+        history_settings = {
+            "notification_retention_days": DEFAULT_NOTIFICATION_RETENTION_DAYS,
+            "session_retention_days": DEFAULT_SESSION_RETENTION_DAYS,
+        }
         save_web_store()
 
 
@@ -1073,7 +1081,7 @@ def set_farm_name(farm_name):
 # ==========================================
 
 def normalize_history_settings(raw_settings):
-    """通知履歴の自動削除設定を安全な形式へ正規化する。"""
+    """通知履歴・sessionsフォルダの自動削除設定を安全な形式へ正規化する。"""
     if not isinstance(raw_settings, dict):
         raw_settings = {}
 
@@ -1082,11 +1090,22 @@ def normalize_history_settings(raw_settings):
     except Exception:
         retention_days = DEFAULT_NOTIFICATION_RETENTION_DAYS
 
+    try:
+        session_retention_days = int(raw_settings.get("session_retention_days", DEFAULT_SESSION_RETENTION_DAYS))
+    except Exception:
+        session_retention_days = DEFAULT_SESSION_RETENTION_DAYS
+
     # 0以下は無効化（自動削除しない）とみなす。
     if retention_days < 0:
         retention_days = 0
 
-    return {"notification_retention_days": retention_days}
+    if session_retention_days < 0:
+        session_retention_days = 0
+
+    return {
+        "notification_retention_days": retention_days,
+        "session_retention_days": session_retention_days,
+    }
 
 
 def get_history_settings():
@@ -1107,9 +1126,28 @@ def set_notification_retention_days(days):
     if days < 0:
         return False
 
-    history_settings = {"notification_retention_days": days}
+    history_settings = normalize_history_settings(history_settings)
+    history_settings["notification_retention_days"] = days
     save_web_store()
     purge_expired_notification_history()
+    return True
+
+
+def set_session_retention_days(days):
+    """sessionsフォルダ（動画・画像等）の保存日数を設定する。0を指定すると自動削除を無効化する。"""
+    global history_settings
+
+    try:
+        days = int(days)
+    except Exception:
+        return False
+
+    if days < 0:
+        return False
+
+    history_settings = normalize_history_settings(history_settings)
+    history_settings["session_retention_days"] = days
+    save_web_store()
     return True
 
 

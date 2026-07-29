@@ -41,6 +41,7 @@ try:
         set_farm_name,
         get_history_settings,
         set_notification_retention_days,
+        set_session_retention_days,
         purge_expired_notification_history,
         set_line_enabled,
         save_line_recipient,
@@ -78,6 +79,7 @@ except ImportError:
         set_farm_name,
         get_history_settings,
         set_notification_retention_days,
+        set_session_retention_days,
         purge_expired_notification_history,
         set_line_enabled,
         save_line_recipient,
@@ -1121,8 +1123,60 @@ def sync_web_histories_from_sessions():
     }
 
 
-PURGE_INTERVAL_SEC = 3600  # 通知履歴の自動削除チェック間隔（1時間）
+PURGE_INTERVAL_SEC = 3600  # 通知履歴・sessionsフォルダの自動削除チェック間隔（1時間）
 _last_purge_time = 0.0
+
+
+def purge_expired_sessions():
+    """
+    sessionsフォルダ内の古いセッション(動画・画像・CSV等)を自動で削除する。
+
+    ラズパイの容量を圧迫し続けないよう、設定日数(session_retention_days)
+    より古いセッションフォルダを丸ごと削除する。まだ通知処理が済んで
+    いない(processed_session_idsに無い)セッションは、通知漏れを防ぐため
+    削除しない。0以下が設定されている場合は削除しない。
+    """
+    settings = get_history_settings()
+    retention_days = settings.get("session_retention_days", 30)
+
+    if retention_days <= 0:
+        return False
+
+    if not SESSIONS_DIR.exists():
+        return False
+
+    cutoff_time = time.time() - (retention_days * 86400)
+    deleted_count = 0
+
+    for session_dir in sorted(SESSIONS_DIR.iterdir()):
+        if not session_dir.is_dir():
+            continue
+
+        session_id = session_dir.name
+
+        # 通知処理がまだ済んでいないセッションは、通知漏れを防ぐため削除しない。
+        if session_id not in processed_session_ids:
+            continue
+
+        try:
+            dir_mtime = session_dir.stat().st_mtime
+        except OSError:
+            continue
+
+        if dir_mtime >= cutoff_time:
+            continue
+
+        try:
+            shutil.rmtree(session_dir)
+            deleted_count += 1
+            print(f"sessionsフォルダの自動削除: {session_id} を削除しました。")
+        except OSError as error:
+            print(f"sessionsフォルダの自動削除に失敗しました({session_id}): {error}")
+
+    if deleted_count:
+        print(f"sessionsフォルダの自動削除: 合計{deleted_count}件を削除しました（保存期間 {retention_days}日）")
+
+    return deleted_count > 0
 
 
 def watch_sessions_loop():
@@ -1141,6 +1195,7 @@ def watch_sessions_loop():
 
             if time.time() - _last_purge_time >= PURGE_INTERVAL_SEC:
                 purge_expired_notification_history()
+                purge_expired_sessions()
                 _last_purge_time = time.time()
 
         except Exception as error:
@@ -1539,7 +1594,7 @@ def api_store_settings():
 
 @app.route("/api/history_settings", methods=["GET", "POST"])
 def api_history_settings():
-    """通知履歴の自動削除設定（保存日数）を取得・保存する。"""
+    """通知履歴・sessionsフォルダの自動削除設定（保存日数）を取得・保存する。"""
     if request.method == "GET":
         return jsonify({
             "status": "success",
@@ -1548,29 +1603,51 @@ def api_history_settings():
 
     data = request.json or {}
 
-    try:
-        retention_days = int(data.get("notification_retention_days", ""))
-    except Exception:
-        return jsonify({
-            "status": "error",
-            "message": "保存日数は整数で入力してください。"
-        }), 400
+    if "notification_retention_days" in data:
+        try:
+            retention_days = int(data.get("notification_retention_days", ""))
+        except Exception:
+            return jsonify({
+                "status": "error",
+                "message": "通知履歴の保存日数は整数で入力してください。"
+            }), 400
 
-    if retention_days < 0:
-        return jsonify({
-            "status": "error",
-            "message": "保存日数は0以上で入力してください。"
-        }), 400
+        if retention_days < 0:
+            return jsonify({
+                "status": "error",
+                "message": "通知履歴の保存日数は0以上で入力してください。"
+            }), 400
 
-    if not set_notification_retention_days(retention_days):
-        return jsonify({
-            "status": "error",
-            "message": "通知履歴の自動削除設定を保存できませんでした。"
-        }), 500
+        if not set_notification_retention_days(retention_days):
+            return jsonify({
+                "status": "error",
+                "message": "通知履歴の自動削除設定を保存できませんでした。"
+            }), 500
+
+    if "session_retention_days" in data:
+        try:
+            session_retention_days = int(data.get("session_retention_days", ""))
+        except Exception:
+            return jsonify({
+                "status": "error",
+                "message": "sessionsフォルダの保存日数は整数で入力してください。"
+            }), 400
+
+        if session_retention_days < 0:
+            return jsonify({
+                "status": "error",
+                "message": "sessionsフォルダの保存日数は0以上で入力してください。"
+            }), 400
+
+        if not set_session_retention_days(session_retention_days):
+            return jsonify({
+                "status": "error",
+                "message": "sessionsフォルダの自動削除設定を保存できませんでした。"
+            }), 500
 
     return jsonify({
         "status": "success",
-        "message": "通知履歴の自動削除設定を保存しました。",
+        "message": "自動削除設定を保存しました。",
         "settings": get_history_settings(),
         "notifications": get_notification_history()
     })

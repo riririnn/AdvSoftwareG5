@@ -232,16 +232,23 @@
                         <div class="card-header">
                             <div>
                                 <span class="section-icon">🗑</span>
-                                <h2>通知履歴の自動削除</h2>
+                                <h2>自動削除設定</h2>
                             </div>
                         </div>
 
                         <form id="historySettingsForm" class="product-form">
                             <label>
-                                保存日数（日）
+                                通知履歴の保存日数（日）
                                 <input id="notificationRetentionInput" type="number" min="0" step="1" placeholder="例）30" required />
                             </label>
-                            <small class="form-help">指定した日数より古い通知履歴を自動で削除します。ラズパイの容量圧迫を防ぎます。0を指定すると自動削除しません。</small>
+                            <small class="form-help">指定した日数より古い通知履歴（Web画面の表示のみ）を自動で削除します。0を指定すると自動削除しません。</small>
+
+                            <label>
+                                sessionsフォルダの保存日数（日）
+                                <input id="sessionRetentionInput" type="number" min="0" step="1" placeholder="例）30" required />
+                            </label>
+                            <small class="form-help">指定した日数より古いsessionフォルダ（動画・画像・CSVなど）を自動で削除します。ラズパイの容量圧迫を防ぎます。通知処理が済んでいないセッションは削除しません。0を指定すると自動削除しません。</small>
+
                             <button class="primary-button" type="submit">保存日数を保存</button>
                         </form>
                     </section>
@@ -346,7 +353,7 @@ const state = {
     weightSensors: { weight_sensor_count: 1, weight_sensor_targets: {} },
     lineSettings: { line_enabled: true, recipients: [] },
     storeSettings: { farm_name: 'このRaspberry Piの無人販売所' },
-    historySettings: { notification_retention_days: 30 },
+    historySettings: { notification_retention_days: 30, session_retention_days: 30 },
     notificationFilter: 'all'
 };
 
@@ -403,7 +410,7 @@ async function refreshAll(options = {}) {
         state.weightSensors = data.weightSensors || { weight_sensor_count: 1, weight_sensor_targets: {} };
         state.lineSettings = data.lineSettings || { line_enabled: true, recipients: [] };
         state.storeSettings = data.storeSettings || { farm_name: 'このRaspberry Piの無人販売所' };
-        state.historySettings = data.historySettings || { notification_retention_days: 30 };
+        state.historySettings = data.historySettings || { notification_retention_days: 30, session_retention_days: 30 };
 
         renderAll();
         if (options.toast) showToast('最新の情報に更新しました。');
@@ -820,11 +827,16 @@ function renderStoreSettings() {
 
 
 function renderHistorySettings() {
-    const settings = state.historySettings || { notification_retention_days: 30 };
+    const settings = state.historySettings || { notification_retention_days: 30, session_retention_days: 30 };
     const input = document.getElementById('notificationRetentionInput');
+    const sessionInput = document.getElementById('sessionRetentionInput');
 
     if (input && document.activeElement !== input) {
         input.value = Number(settings.notification_retention_days ?? 30);
+    }
+
+    if (sessionInput && document.activeElement !== sessionInput) {
+        sessionInput.value = Number(settings.session_retention_days ?? 30);
     }
 }
 
@@ -930,11 +942,15 @@ document.getElementById('historySettingsForm').addEventListener('submit', async 
     event.preventDefault();
 
     const days = Number(document.getElementById('notificationRetentionInput').value);
+    const sessionDays = Number(document.getElementById('sessionRetentionInput').value);
 
     try {
         const result = await apiJson('/api/history_settings', {
             method: 'POST',
-            body: JSON.stringify({ notification_retention_days: days })
+            body: JSON.stringify({
+                notification_retention_days: days,
+                session_retention_days: sessionDays
+            })
         });
         state.historySettings = result.settings || state.historySettings;
         if (result.notifications) state.notifications = result.notifications;

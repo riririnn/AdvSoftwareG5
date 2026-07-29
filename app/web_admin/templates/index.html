@@ -137,6 +137,7 @@
                                 <span class="section-icon">¥</span>
                                 <h2>最近の売上</h2>
                             </div>
+                            <button class="link-button" type="button" onclick="clearAllSales()">🗑 売上履歴を全て削除</button>
                         </div>
                         <div id="homeSalesPreview" class="preview-list compact"></div>
                     </section>
@@ -552,8 +553,37 @@ function renderHome() {
             <span>${Number(s.quantity || 0)}個</span>
             <span class="money">${yen(s.amount)}</span>
             <small>${escapeHtml(shortDate(s.time))}</small>
+            <button class="notification-delete-button" type="button" onclick="deleteSalesRecord('${s.id}')">削除</button>
         </div>
     `).join('') : emptyHtml('売上履歴はまだありません。');
+}
+
+async function deleteSalesRecord(salesId) {
+    if (!salesId) return;
+    if (!window.confirm('この売上履歴を削除しますか？')) return;
+
+    try {
+        await apiJson('/api/sales/delete', {
+            method: 'POST',
+            body: JSON.stringify({ id: salesId })
+        });
+        await refreshAll();
+        showToast('売上履歴を削除しました。');
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
+}
+
+async function clearAllSales() {
+    if (!window.confirm('売上履歴を全て削除しますか？この操作は取り消せません。')) return;
+
+    try {
+        await apiJson('/api/sales/clear', { method: 'POST', body: '{}' });
+        await refreshAll();
+        showToast('売上履歴をすべて削除しました。');
+    } catch (error) {
+        showToast(error.message, 'error');
+    }
 }
 
 function renderInventory() {

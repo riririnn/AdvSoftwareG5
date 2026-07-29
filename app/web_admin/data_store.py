@@ -677,6 +677,10 @@ def load_web_store():
             if isinstance(record, dict) and not record.get("id"):
                 record["id"] = uuid.uuid4().hex
 
+        for record in sales_history:
+            if isinstance(record, dict) and not record.get("id"):
+                record["id"] = uuid.uuid4().hex
+
         line_settings = normalize_line_settings(data.get("line_settings", {}))
         store_settings = normalize_store_settings(data.get("store_settings", {}))
 
@@ -1440,6 +1444,7 @@ def add_sales_record(item_name, quantity, amount):
     display_name = get_product_display_name(product_id)
 
     record = {
+        "id": uuid.uuid4().hex,
         "time": datetime.now().strftime("%Y/%m/%d %H:%M:%S"),
         "item_name": display_name,
         "quantity": int(quantity),
@@ -1448,6 +1453,35 @@ def add_sales_record(item_name, quantity, amount):
 
     sales_history.insert(0, record)
     save_web_store()
+
+
+def delete_sales_record(sales_id):
+    """指定したIDの売上履歴を1件だけ削除する。"""
+    global sales_history
+
+    sales_id = str(sales_id or "").strip()
+    if not sales_id:
+        return False
+
+    before = len(sales_history)
+    sales_history = [
+        record for record in sales_history
+        if str(record.get("id", "")) != sales_id
+    ]
+
+    if len(sales_history) == before:
+        return False
+
+    save_web_store()
+    return True
+
+
+def clear_sales_history():
+    """売上履歴を全件削除する。"""
+    global sales_history
+    sales_history = []
+    save_web_store()
+    return True
 
 
 def add_notification_record(notification_type, item_name, quantity, amount):

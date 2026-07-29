@@ -27,6 +27,8 @@ try:
         add_notification_record,
         delete_notification_record,
         clear_notification_history,
+        delete_sales_record,
+        clear_sales_history,
         get_product_price,
         get_display_name_by_label,
         get_product_display_name,
@@ -59,6 +61,8 @@ except ImportError:
         add_notification_record,
         delete_notification_record,
         clear_notification_history,
+        delete_sales_record,
+        clear_sales_history,
         get_product_price,
         get_display_name_by_label,
         get_product_display_name,
@@ -1239,6 +1243,35 @@ def api_get_products():
 @app.route("/api/sales", methods=["GET"])
 def api_get_sales():
     return jsonify(get_sales_history())
+
+
+@app.route("/api/sales/delete", methods=["POST"])
+def api_delete_sales_record():
+    data = request.json or {}
+    sales_id = data.get("id")
+
+    if not sales_id:
+        return jsonify({"status": "error", "message": "売上IDが指定されていません。"}), 400
+
+    deleted = delete_sales_record(sales_id)
+    if not deleted:
+        return jsonify({"status": "error", "message": "指定された売上履歴は見つかりませんでした。"}), 404
+
+    return jsonify({
+        "status": "success",
+        "message": "売上履歴を削除しました。",
+        "sales": get_sales_history()
+    })
+
+
+@app.route("/api/sales/clear", methods=["POST"])
+def api_clear_sales():
+    clear_sales_history()
+    return jsonify({
+        "status": "success",
+        "message": "売上履歴をすべて削除しました。",
+        "sales": get_sales_history()
+    })
 
 
 @app.route("/api/notifications", methods=["GET"])

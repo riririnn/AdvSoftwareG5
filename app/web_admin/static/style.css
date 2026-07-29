@@ -285,7 +285,7 @@ button { cursor: pointer; }
     border-bottom: 1px solid var(--line);
 }
 .preview-row:last-child { border-bottom: 0; }
-.preview-list.compact .preview-row { grid-template-columns: auto 1fr auto auto; }
+.preview-list.compact .preview-row { grid-template-columns: auto 1fr auto auto auto; }
 .item-main {
     display: flex;
     align-items: center;

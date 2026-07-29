@@ -1701,8 +1701,13 @@ if __name__ == "__main__":
     # 1台のRaspberry Piを1販売所として扱い、共通データを読み込む。
     initialize_single_device_store()
 
-    # 起動時に sessions フォルダの内容を基準にWeb履歴を復元する
-    sync_web_histories_from_sessions()
+    # data_store.jsonの売上・通知履歴が両方とも空の場合だけ、
+    # sessionsフォルダの内容から復元する。
+    # 既に履歴がある状態で毎回全件を作り直すと、Web管理画面で削除した
+    # 履歴もsessions内のsession.jsonから復活してしまうため、
+    # 通常の再起動では実行しない。
+    if not get_sales_history() and not get_notification_history():
+        sync_web_histories_from_sessions()
 
     watcher_thread = threading.Thread(
         target=watch_sessions_loop,

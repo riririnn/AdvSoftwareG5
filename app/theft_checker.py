@@ -768,7 +768,11 @@ def check_theft(session_dir: Path):
 
     判定ルール:
     ・購入合計金額（重量ベース） > 投入金額（coin.csv） → "theft"
-    ・または coin_weight_status が "too_heavy" / "too_light" → "theft"
+    ・購入合計金額 > 0 かつ coin_weight_status が "too_heavy" / "too_light" → "theft"
+      （商品を取っていない(購入合計金額が0円)場合は、コイン重量が
+        一致しなくても万引きとはみなさない。商品を取ったが結局戻した、
+        支払った後に気が変わってコインを取り返した、などのケースを
+        誤って万引き扱いしないため）
     ・上記いずれにも該当しない → "normal"
     """
 
@@ -845,7 +849,13 @@ def check_theft(session_dir: Path):
     if shortage <= 0:
         shortage = 0
 
-    if shortage > 0 or coin_weight_status != "ok":
+    # 商品が実際には減っていない(purchase_amount == 0)場合、コイン重量が
+    # 多少合わなくても万引きとはみなさない。商品を取ったが結局戻した、
+    # 支払った後に気が変わってコインを取り返した、などのケースで
+    # 「何も買っていないのにお金の重さだけで万引き扱い」になるのを防ぐため。
+    if shortage > 0:
+        judgement = "theft"
+    elif purchase_amount > 0 and coin_weight_status != "ok":
         judgement = "theft"
     else:
         judgement = "normal"

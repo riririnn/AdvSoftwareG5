@@ -491,7 +491,18 @@ class _LivePaymentMonitor:
     def __init__(self, before_vegetable_weight: float):
         self.before_vegetable_weight = float(before_vegetable_weight)
         self._paid_amount = 0
-        self._required_amount = 0
+
+        # 支払いフェーズの必要金額は、まだ重量が動いていない時点でも
+        # 判定できるよう、対象商品の単価を固定値として使う。
+        try:
+            self._required_amount = int(VEGETABLE_PRICES[TARGET_VEGETABLE])
+        except (KeyError, TypeError, ValueError):
+            self._required_amount = 0
+
+        # 支払いフェーズが完了した(=画像認識で必要金額以上を確認できた)かどうか。
+        # 一度Trueになったら、そのセッション中は戻さない
+        # （以降はコイン認識自体を止め、重量判定フェーズへ切り替えるため）。
+        self._payment_phase_done = False
         self._weight_judged = False
         self._lock = threading.RLock()
         self._stop_event = threading.Event()
@@ -499,20 +510,39 @@ class _LivePaymentMonitor:
         self._last_error = None
 
     def start(self):
-        indicator_show_live_status(payment_ok=False, weight_ok=False, required_amount=0, paid_amount=0)
+        indicator_show_live_status(payment_ok=False, weight_ok=False, required_amount=self._required_amount, paid_amount=0)
         self._thread.start()
+
+    def is_payment_phase_done(self) -> bool:
+        """画像認識（コイン投入）による支払い判定が完了したか。"""
+        with self._lock:
+            return self._payment_phase_done
 
     def add_coins(self, coins: list[int]):
         if not coins:
             return
 
         with self._lock:
+            if self._payment_phase_done:
+                # 支払いフェーズはすでに完了しているため、これ以上は受け付けない
+                # （1回の支払いで1回分の取引とみなす）。
+                return
+
             self._paid_amount += sum(int(coin) for coin in coins)
             required = self._required_amount
             paid = self._paid_amount
+
+            if required > 0 and paid >= required:
+                self._payment_phase_done = True
+                print(
+                    "[Controller] 画像認識で支払いを確認しました。"
+                    f"必要{required}円 / 投入{paid}円 → 重量判定フェーズへ移行します。"
+                )
+
+            payment_phase_done = self._payment_phase_done
             weight_judged = self._weight_judged
 
-        self._apply_indicator(required, paid, weight_judged)
+        self._apply_indicator(required, paid, payment_phase_done, weight_judged)
 
     def remove_coins(self, coins: list[int]):
         """トレイから取り除かれた硬貨の分だけ、投入済み金額を減らす。"""
@@ -520,20 +550,25 @@ class _LivePaymentMonitor:
             return
 
         with self._lock:
+            if self._payment_phase_done:
+                # 支払いフェーズ完了後はコイン認識自体を止めるため、通常ここは
+                # 呼ばれない想定だが、念のため何もしない。
+                return
+
             self._paid_amount = max(0, self._paid_amount - sum(int(coin) for coin in coins))
             required = self._required_amount
             paid = self._paid_amount
+            payment_phase_done = self._payment_phase_done
             weight_judged = self._weight_judged
 
-        self._apply_indicator(required, paid, weight_judged)
+        self._apply_indicator(required, paid, payment_phase_done, weight_judged)
 
-    def _apply_indicator(self, required: int, paid: int, weight_judged: bool):
-        # 商品をまだ取っていない状態(required=0)は、支払うものがまだ無いので
-        # 赤LEDは消さない（画像処理＝コイン投入の判定は「必要金額以上」で見る）。
-        payment_ok = required > 0 and paid >= required
+    def _apply_indicator(self, required: int, paid: int, payment_phase_done: bool, weight_judged: bool):
+        # 緑LEDは、支払いフェーズが完了した後に重量判定が確定して初めてつける
+        # （画像処理→重量判定の順で切り替える設計のため）。
         indicator_show_live_status(
-            payment_ok=payment_ok,
-            weight_ok=weight_judged,
+            payment_ok=payment_phase_done,
+            weight_ok=payment_phase_done and weight_judged,
             required_amount=required,
             paid_amount=paid,
         )
@@ -542,17 +577,18 @@ class _LivePaymentMonitor:
         while not self._stop_event.wait(PAYMENT_LED_UPDATE_INTERVAL):
             try:
                 current_weight = get_vegetable_weight()
-                required, weight_judged = _calculate_live_purchase_amount(
+                _, weight_judged = _calculate_live_purchase_amount(
                     self.before_vegetable_weight,
                     current_weight,
                 )
 
                 with self._lock:
-                    self._required_amount = required
                     self._weight_judged = weight_judged
+                    required = self._required_amount
                     paid = self._paid_amount
+                    payment_phase_done = self._payment_phase_done
 
-                self._apply_indicator(required, paid, weight_judged)
+                self._apply_indicator(required, paid, payment_phase_done, weight_judged)
                 self._last_error = None
 
             except Exception as error:
@@ -749,16 +785,24 @@ class Controller:
 
                 # -------------------------
                 # コイン認識
+                # （画像認識で支払いを確認できたら、コインカメラの呼び出し
+                #   自体を止めて重量判定フェーズへ切り替える。CPU負荷軽減のため。）
                 # -------------------------
 
-                new_coins, removed_coins = detect_coin()
+                payment_phase_done = (
+                    self.payment_monitor is not None
+                    and self.payment_monitor.is_payment_phase_done()
+                )
 
-                for coin in new_coins:
-                    log_coin(session_dir, coin)
+                if not payment_phase_done:
+                    new_coins, removed_coins = detect_coin()
 
-                if self.payment_monitor is not None:
-                    self.payment_monitor.add_coins(new_coins)
-                    self.payment_monitor.remove_coins(removed_coins)
+                    for coin in new_coins:
+                        log_coin(session_dir, coin)
+
+                    if self.payment_monitor is not None:
+                        self.payment_monitor.add_coins(new_coins)
+                        self.payment_monitor.remove_coins(removed_coins)
 
                 # -------------------------
                 # 人検知

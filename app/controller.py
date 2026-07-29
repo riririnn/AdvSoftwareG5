@@ -702,7 +702,7 @@ class _LivePaymentMonitor:
                                 and abs(coin_weight_diff) <= COIN_WEIGHT_MARGIN
                             )
 
-                            if self._paid_coins and new_coin_weight_ok != self._coin_weight_ok:
+                            if self._paid_coins and not new_coin_weight_ok:
                                 print(
                                     "[Controller] コイン重量デバッグ: "
                                     f"投入コイン={self._paid_coins} / "

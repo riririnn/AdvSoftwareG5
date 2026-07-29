@@ -99,6 +99,12 @@ NON_VEGETABLE_CLASSES = set(COIN_VALUES) | {"1000yen", "5000yen", "10000yen", "p
 # 前回のコイン検出枚数（増えた分だけを新規投入と判定するための状態）
 _last_coin_counts: dict[str, int] = {}
 
+# 1フレームだけの誤検出で新規投入と確定しないための状態。
+# 同じ検出結果が連続してCOIN_STABLE_FRAMES回続いたときだけ確定させる。
+_pending_coin_counts: dict[str, int] = {}
+_pending_coin_streak = 0
+COIN_STABLE_FRAMES = 2
+
 
 def _open_camera(camera_index: int) -> cv2.VideoCapture:
     # バックエンドを明示的にV4L2に固定する。
@@ -291,8 +297,12 @@ def detect_coin():
     """
     コイン認識（コインカメラ + coin YOLO）
 
-    前回検出より枚数が増えた分だけを「新規投入」として返す。
+    前回確定した枚数より増えた分だけを「新規投入」として返す。
     （同じ硬貨がトレイに置かれたままでも重複カウントしない）
+
+    1フレームだけの誤検出（反射・影・重なりなどによる瞬間的な
+    誤検出）で投入額が誤って加算されないよう、同じ検出結果が
+    COIN_STABLE_FRAMES回連続してから初めて確定させる。
 
     Returns
     -------
@@ -307,7 +317,7 @@ def detect_coin():
     [10,10]
 
     """
-    global _last_coin_counts
+    global _last_coin_counts, _pending_coin_counts, _pending_coin_streak
 
     if USE_DUMMY_AI:
         answer = input("コイン(空ならEnter): ")
@@ -323,7 +333,17 @@ def detect_coin():
         if name in COIN_VALUES:
             counts[name] = counts.get(name, 0) + 1
 
-    # 前回より増えた枚数分だけを新規投入とみなす
+    if counts == _pending_coin_counts:
+        _pending_coin_streak += 1
+    else:
+        _pending_coin_counts = counts
+        _pending_coin_streak = 1
+
+    if _pending_coin_streak < COIN_STABLE_FRAMES:
+        # まだ安定して検出できていないため、今回は確定させない。
+        return []
+
+    # 前回確定分より増えた枚数分だけを新規投入とみなす
     new_coins = []
     for name, n in counts.items():
         added = n - _last_coin_counts.get(name, 0)
@@ -404,8 +424,10 @@ def detect_vegetables(save_path=None):
 
 def reset_coin_tracking():
     """コインの新規投入判定をリセットする（セッション開始時に呼ぶ）。"""
-    global _last_coin_counts
+    global _last_coin_counts, _pending_coin_counts, _pending_coin_streak
     _last_coin_counts = {}
+    _pending_coin_counts = {}
+    _pending_coin_streak = 0
 
 
 # ==========================================

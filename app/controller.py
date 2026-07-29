@@ -46,6 +46,7 @@ from config import (
     TARGET_VEGETABLE,
     VEGETABLE_PRICES,
     VEGETABLE_WEIGHTS,
+    VEGETABLE_WEIGHT_MARGIN,
 )
 
 from csv_logger import (
@@ -70,6 +71,7 @@ from payment_indicator import (
     show_pending as indicator_show_pending,
     show_paid as indicator_show_paid,
     show_theft as indicator_show_theft,
+    show_live_status as indicator_show_live_status,
     cleanup as cleanup_payment_indicator,
 )
 
@@ -446,23 +448,36 @@ def reset_coin_tracking():
 def _calculate_live_purchase_amount(
     before_vegetable_weight: float,
     current_vegetable_weight: float,
-) -> int:
-    """重量減少から、現在支払うべき金額を最終判定と同じ方式で計算する。"""
+) -> tuple[int, bool]:
+    """
+    重量減少から、現在支払うべき金額と、重量判定が確定できたかを
+    最終判定と同じ方式で計算する。
+
+    Returns
+    -------
+    tuple(int, bool)
+        (支払うべき金額, 重量判定が確定できたか)
+        重量判定は「1個以上減っている」かつ「丸め誤差が
+        VEGETABLE_WEIGHT_MARGIN以内」の場合にTrueとなる。
+    """
     try:
         unit_weight = float(VEGETABLE_WEIGHTS[TARGET_VEGETABLE])
         unit_price = int(VEGETABLE_PRICES[TARGET_VEGETABLE])
     except (KeyError, TypeError, ValueError):
-        return 0
+        return 0, False
 
     if unit_weight <= 0 or unit_price < 0:
-        return 0
+        return 0, False
 
     decreased_weight = max(
         0.0,
         float(before_vegetable_weight) - float(current_vegetable_weight),
     )
     estimated_count = max(0, round(decreased_weight / unit_weight))
-    return int(estimated_count * unit_price)
+    rounding_error = abs(decreased_weight - (estimated_count * unit_weight))
+    weight_judged = estimated_count > 0 and rounding_error <= VEGETABLE_WEIGHT_MARGIN
+
+    return int(estimated_count * unit_price), weight_judged
 
 
 class _LivePaymentMonitor:
@@ -477,13 +492,14 @@ class _LivePaymentMonitor:
         self.before_vegetable_weight = float(before_vegetable_weight)
         self._paid_amount = 0
         self._required_amount = 0
+        self._weight_judged = False
         self._lock = threading.RLock()
         self._stop_event = threading.Event()
         self._thread = threading.Thread(target=self._loop, daemon=True)
         self._last_error = None
 
     def start(self):
-        indicator_show_pending(0, 0)
+        indicator_show_live_status(payment_ok=False, weight_ok=False, required_amount=0, paid_amount=0)
         self._thread.start()
 
     def add_coins(self, coins: list[int]):
@@ -494,8 +510,9 @@ class _LivePaymentMonitor:
             self._paid_amount += sum(int(coin) for coin in coins)
             required = self._required_amount
             paid = self._paid_amount
+            weight_judged = self._weight_judged
 
-        self._apply_indicator(required, paid)
+        self._apply_indicator(required, paid, weight_judged)
 
     def remove_coins(self, coins: list[int]):
         """トレイから取り除かれた硬貨の分だけ、投入済み金額を減らす。"""
@@ -506,30 +523,36 @@ class _LivePaymentMonitor:
             self._paid_amount = max(0, self._paid_amount - sum(int(coin) for coin in coins))
             required = self._required_amount
             paid = self._paid_amount
+            weight_judged = self._weight_judged
 
-        self._apply_indicator(required, paid)
+        self._apply_indicator(required, paid, weight_judged)
 
-    def _apply_indicator(self, required: int, paid: int):
-        # 商品をまだ取っていない状態(required=0)は、来客中なので赤のままにする。
-        if required > 0 and paid >= required:
-            indicator_show_paid(required, paid)
-        else:
-            indicator_show_pending(required, paid)
+    def _apply_indicator(self, required: int, paid: int, weight_judged: bool):
+        # 商品をまだ取っていない状態(required=0)は、支払うものがまだ無いので
+        # 赤LEDは消さない（画像処理＝コイン投入の判定は「必要金額以上」で見る）。
+        payment_ok = required > 0 and paid >= required
+        indicator_show_live_status(
+            payment_ok=payment_ok,
+            weight_ok=weight_judged,
+            required_amount=required,
+            paid_amount=paid,
+        )
 
     def _loop(self):
         while not self._stop_event.wait(PAYMENT_LED_UPDATE_INTERVAL):
             try:
                 current_weight = get_vegetable_weight()
-                required = _calculate_live_purchase_amount(
+                required, weight_judged = _calculate_live_purchase_amount(
                     self.before_vegetable_weight,
                     current_weight,
                 )
 
                 with self._lock:
                     self._required_amount = required
+                    self._weight_judged = weight_judged
                     paid = self._paid_amount
 
-                self._apply_indicator(required, paid)
+                self._apply_indicator(required, paid, weight_judged)
                 self._last_error = None
 
             except Exception as error:

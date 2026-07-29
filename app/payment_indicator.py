@@ -144,6 +144,49 @@ def show_paid(required_amount: int = 0, paid_amount: int = 0) -> None:
         _last_display_signature = signature
 
 
+def show_live_status(
+    *,
+    payment_ok: bool,
+    weight_ok: bool,
+    required_amount: int = 0,
+    paid_amount: int = 0,
+) -> None:
+    """
+    来客中のリアルタイム表示。赤LEDと緑LEDを独立して制御する。
+
+    - 画像処理（コイン認識）で必要金額以上の投入を確認できたら赤LEDを消す。
+    - 重量判定で商品の重量減少が有効に確認できたら緑LEDをつける。
+    - 従来のように「片方だけがON」とは限らない（両方OFF/両方ONもありうる）。
+    """
+    global _last_display_signature
+    required_amount = int(required_amount)
+    paid_amount = int(paid_amount)
+    payment_ok = bool(payment_ok)
+    weight_ok = bool(weight_ok)
+    signature = ("live", payment_ok, weight_ok, required_amount, paid_amount)
+
+    with _lock:
+        if _red_led:
+            if payment_ok:
+                _red_led.off()
+            else:
+                _red_led.on()
+        if _green_led:
+            if weight_ok:
+                _green_led.on()
+            else:
+                _green_led.off()
+
+    if signature != _last_display_signature:
+        print(
+            "[PaymentIndicator] ライブ状態: "
+            f"必要{required_amount}円 / 投入{paid_amount}円 / "
+            f"支払いOK={payment_ok}（赤LED{'OFF' if payment_ok else 'ON'}） / "
+            f"重量判定OK={weight_ok}（緑LED{'ON' if weight_ok else 'OFF'}）"
+        )
+        _last_display_signature = signature
+
+
 def show_theft(shortage: int = 0) -> None:
     """退店後に未払いが確定した状態。赤LEDとブザーを作動する。"""
     global _buzzer_alert_active, _last_display_signature

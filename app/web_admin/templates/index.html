@@ -238,12 +238,6 @@
 
                         <form id="historySettingsForm" class="product-form">
                             <label>
-                                通知履歴の保存日数（日）
-                                <input id="notificationRetentionInput" type="number" min="0" step="1" placeholder="例）30" required />
-                            </label>
-                            <small class="form-help">指定した日数より古い通知履歴（Web画面の表示のみ）を自動で削除します。0を指定すると自動削除しません。</small>
-
-                            <label>
                                 sessionsフォルダの保存日数（日）
                                 <input id="sessionRetentionInput" type="number" min="0" step="1" placeholder="例）30" required />
                             </label>
@@ -828,12 +822,7 @@ function renderStoreSettings() {
 
 function renderHistorySettings() {
     const settings = state.historySettings || { notification_retention_days: 30, session_retention_days: 30 };
-    const input = document.getElementById('notificationRetentionInput');
     const sessionInput = document.getElementById('sessionRetentionInput');
-
-    if (input && document.activeElement !== input) {
-        input.value = Number(settings.notification_retention_days ?? 30);
-    }
 
     if (sessionInput && document.activeElement !== sessionInput) {
         sessionInput.value = Number(settings.session_retention_days ?? 30);
@@ -941,14 +930,12 @@ document.getElementById('farmNameForm').addEventListener('submit', async (event)
 document.getElementById('historySettingsForm').addEventListener('submit', async (event) => {
     event.preventDefault();
 
-    const days = Number(document.getElementById('notificationRetentionInput').value);
     const sessionDays = Number(document.getElementById('sessionRetentionInput').value);
 
     try {
         const result = await apiJson('/api/history_settings', {
             method: 'POST',
             body: JSON.stringify({
-                notification_retention_days: days,
                 session_retention_days: sessionDays
             })
         });

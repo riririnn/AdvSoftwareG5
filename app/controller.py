@@ -297,24 +297,27 @@ def detect_coin():
     """
     コイン認識（コインカメラ + coin YOLO）
 
-    前回確定した枚数より増えた分だけを「新規投入」として返す。
-    （同じ硬貨がトレイに置かれたままでも重複カウントしない）
+    前回確定した枚数より増えた分を「新規投入」、減った分を「取り除かれた」
+    として返す。（同じ硬貨がトレイに置かれたままでも重複カウントしない）
 
     1フレームだけの誤検出（反射・影・重なりなどによる瞬間的な
-    誤検出）で投入額が誤って加算されないよう、同じ検出結果が
+    誤検出）で投入額が誤って加算・減算されないよう、同じ検出結果が
     COIN_STABLE_FRAMES回連続してから初めて確定させる。
 
     Returns
     -------
-    list[int]
+    tuple(list[int], list[int])
+        (新規投入された硬貨のリスト, 取り除かれた硬貨のリスト)
 
     例
     ----
-    []
+    ([], [])
 
-    [100]
+    ([100], [])
 
-    [10,10]
+    ([10, 10], [])
+
+    ([], [100])
 
     """
     global _last_coin_counts, _pending_coin_counts, _pending_coin_streak
@@ -322,8 +325,8 @@ def detect_coin():
     if USE_DUMMY_AI:
         answer = input("コイン(空ならEnter): ")
         if answer == "":
-            return []
-        return [int(answer)]
+            return [], []
+        return [int(answer)], []
 
     detections = _predict(COIN_CAMERA_INDEX, COIN_CONF_THRESHOLD)
 
@@ -341,16 +344,20 @@ def detect_coin():
 
     if _pending_coin_streak < COIN_STABLE_FRAMES:
         # まだ安定して検出できていないため、今回は確定させない。
-        return []
+        return [], []
 
-    # 前回確定分より増えた枚数分だけを新規投入とみなす
+    # 前回確定分より増えた/減った枚数分だけを、それぞれ投入・除去とみなす
     new_coins = []
-    for name, n in counts.items():
-        added = n - _last_coin_counts.get(name, 0)
-        new_coins.extend([COIN_VALUES[name]] * max(added, 0))
+    removed_coins = []
+    for name in set(counts) | set(_last_coin_counts):
+        diff = counts.get(name, 0) - _last_coin_counts.get(name, 0)
+        if diff > 0:
+            new_coins.extend([COIN_VALUES[name]] * diff)
+        elif diff < 0:
+            removed_coins.extend([COIN_VALUES[name]] * (-diff))
 
     _last_coin_counts = counts
-    return new_coins
+    return new_coins, removed_coins
 
 
 def _draw_detections(frame, detections):
@@ -484,6 +491,18 @@ class _LivePaymentMonitor:
 
         with self._lock:
             self._paid_amount += sum(int(coin) for coin in coins)
+            required = self._required_amount
+            paid = self._paid_amount
+
+        self._apply_indicator(required, paid)
+
+    def remove_coins(self, coins: list[int]):
+        """トレイから取り除かれた硬貨の分だけ、投入済み金額を減らす。"""
+        if not coins:
+            return
+
+        with self._lock:
+            self._paid_amount = max(0, self._paid_amount - sum(int(coin) for coin in coins))
             required = self._required_amount
             paid = self._paid_amount
 
@@ -708,13 +727,14 @@ class Controller:
                 # コイン認識
                 # -------------------------
 
-                coins = detect_coin()
+                new_coins, removed_coins = detect_coin()
 
-                for coin in coins:
+                for coin in new_coins:
                     log_coin(session_dir, coin)
 
                 if self.payment_monitor is not None:
-                    self.payment_monitor.add_coins(coins)
+                    self.payment_monitor.add_coins(new_coins)
+                    self.payment_monitor.remove_coins(removed_coins)
 
                 # -------------------------
                 # 人検知

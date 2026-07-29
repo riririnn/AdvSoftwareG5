@@ -25,10 +25,7 @@ try:
         add_or_update_product,
         delete_product,
         add_notification_record,
-        delete_notification_record,
-        clear_notification_history,
-        delete_sales_record,
-        clear_sales_history,
+        delete_records_by_session_id,
         get_product_price,
         get_display_name_by_label,
         get_product_display_name,
@@ -63,10 +60,7 @@ except ImportError:
         add_or_update_product,
         delete_product,
         add_notification_record,
-        delete_notification_record,
-        clear_notification_history,
-        delete_sales_record,
-        clear_sales_history,
+        delete_records_by_session_id,
         get_product_price,
         get_display_name_by_label,
         get_product_display_name,
@@ -681,7 +675,7 @@ def update_inventory_from_session(decreased_items):
     }
 
 
-def add_sales_records_from_session(decreased_items, purchase_amount):
+def add_sales_records_from_session(decreased_items, purchase_amount, session_id=None):
     item_count = len(decreased_items)
 
     for item_label, quantity in decreased_items.items():
@@ -701,11 +695,12 @@ def add_sales_records_from_session(decreased_items, purchase_amount):
         add_sales_record(
             item_name=item_name,
             quantity=quantity,
-            amount=amount
+            amount=amount,
+            session_id=session_id
         )
 
 
-def add_notification_records_from_session(notification_type, decreased_items, amount):
+def add_notification_records_from_session(notification_type, decreased_items, amount, session_id=None):
     for item_label, quantity in decreased_items.items():
         item_name = get_display_name_by_label(item_label)
 
@@ -718,7 +713,8 @@ def add_notification_records_from_session(notification_type, decreased_items, am
             notification_type=notification_type,
             item_name=item_name,
             quantity=quantity,
-            amount=amount
+            amount=amount,
+            session_id=session_id
         )
 
 
@@ -855,13 +851,15 @@ def process_session_path(session_path, ignore_stability=False, force_reprocess=F
 
         add_sales_records_from_session(
             decreased_items=decreased_items,
-            purchase_amount=purchase_amount
+            purchase_amount=purchase_amount,
+            session_id=session_id
         )
 
         add_notification_records_from_session(
             notification_type="購入通知",
             decreased_items=decreased_items,
-            amount=paid_amount
+            amount=paid_amount,
+            session_id=session_id
         )
 
         message = (
@@ -882,7 +880,8 @@ def process_session_path(session_path, ignore_stability=False, force_reprocess=F
         add_notification_records_from_session(
             notification_type="万引き通知",
             decreased_items=decreased_items,
-            amount=shortage
+            amount=shortage,
+            session_id=session_id
         )
 
         message = (
@@ -922,7 +921,8 @@ def process_session_path(session_path, ignore_stability=False, force_reprocess=F
         add_notification_records_from_session(
             notification_type="判定エラー",
             decreased_items=decreased_items,
-            amount=0
+            amount=0,
+            session_id=session_id
         )
 
         message = (
@@ -1135,6 +1135,10 @@ def purge_expired_sessions():
     より古いセッションフォルダを丸ごと削除する。まだ通知処理が済んで
     いない(processed_session_idsに無い)セッションは、通知漏れを防ぐため
     削除しない。0以下が設定されている場合は削除しない。
+
+    セッションフォルダを削除した際は、Web表示用の売上履歴・通知履歴のうち
+    そのsession_idに紐づくものも同期して削除する（証拠データが消えた履歴を
+    表示に残さないため）。
     """
     settings = get_history_settings()
     retention_days = settings.get("session_retention_days", 30)
@@ -1170,6 +1174,7 @@ def purge_expired_sessions():
             shutil.rmtree(session_dir)
             deleted_count += 1
             print(f"sessionsフォルダの自動削除: {session_id} を削除しました。")
+            delete_records_by_session_id(session_id)
         except OSError as error:
             print(f"sessionsフォルダの自動削除に失敗しました({session_id}): {error}")
 
@@ -1316,67 +1321,9 @@ def api_get_sales():
     return jsonify(get_sales_history())
 
 
-@app.route("/api/sales/delete", methods=["POST"])
-def api_delete_sales_record():
-    data = request.json or {}
-    sales_id = data.get("id")
-
-    if not sales_id:
-        return jsonify({"status": "error", "message": "売上IDが指定されていません。"}), 400
-
-    deleted = delete_sales_record(sales_id)
-    if not deleted:
-        return jsonify({"status": "error", "message": "指定された売上履歴は見つかりませんでした。"}), 404
-
-    return jsonify({
-        "status": "success",
-        "message": "売上履歴を削除しました。",
-        "sales": get_sales_history()
-    })
-
-
-@app.route("/api/sales/clear", methods=["POST"])
-def api_clear_sales():
-    clear_sales_history()
-    return jsonify({
-        "status": "success",
-        "message": "売上履歴をすべて削除しました。",
-        "sales": get_sales_history()
-    })
-
-
 @app.route("/api/notifications", methods=["GET"])
 def api_get_notifications():
     return jsonify(get_notification_history())
-
-
-@app.route("/api/notifications/delete", methods=["POST"])
-def api_delete_notification():
-    data = request.json or {}
-    notification_id = data.get("id")
-
-    if not notification_id:
-        return jsonify({"status": "error", "message": "通知IDが指定されていません。"}), 400
-
-    deleted = delete_notification_record(notification_id)
-    if not deleted:
-        return jsonify({"status": "error", "message": "指定された通知は見つかりませんでした。"}), 404
-
-    return jsonify({
-        "status": "success",
-        "message": "通知を削除しました。",
-        "notifications": get_notification_history()
-    })
-
-
-@app.route("/api/notifications/clear", methods=["POST"])
-def api_clear_notifications():
-    clear_notification_history()
-    return jsonify({
-        "status": "success",
-        "message": "通知履歴をすべて削除しました。",
-        "notifications": get_notification_history()
-    })
 
 
 @app.route("/api/product", methods=["POST"])

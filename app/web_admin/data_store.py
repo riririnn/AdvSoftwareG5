@@ -1582,7 +1582,7 @@ def set_inventory(item_name, count):
 # 履歴追加
 # ==========================================
 
-def add_sales_record(item_name, quantity, amount):
+def add_sales_record(item_name, quantity, amount, session_id=None):
     product_id = get_display_name_by_label(item_name)
     display_name = get_product_display_name(product_id)
 
@@ -1591,43 +1591,15 @@ def add_sales_record(item_name, quantity, amount):
         "time": datetime.now().strftime("%Y/%m/%d %H:%M:%S"),
         "item_name": display_name,
         "quantity": int(quantity),
-        "amount": int(amount)
+        "amount": int(amount),
+        "session_id": str(session_id or "") or None,
     }
 
     sales_history.insert(0, record)
     save_web_store()
 
 
-def delete_sales_record(sales_id):
-    """指定したIDの売上履歴を1件だけ削除する。"""
-    global sales_history
-
-    sales_id = str(sales_id or "").strip()
-    if not sales_id:
-        return False
-
-    before = len(sales_history)
-    sales_history = [
-        record for record in sales_history
-        if str(record.get("id", "")) != sales_id
-    ]
-
-    if len(sales_history) == before:
-        return False
-
-    save_web_store()
-    return True
-
-
-def clear_sales_history():
-    """売上履歴を全件削除する。"""
-    global sales_history
-    sales_history = []
-    save_web_store()
-    return True
-
-
-def add_notification_record(notification_type, item_name, quantity, amount):
+def add_notification_record(notification_type, item_name, quantity, amount, session_id=None):
     product_id = get_display_name_by_label(item_name)
     display_name = get_product_display_name(product_id)
 
@@ -1637,40 +1609,49 @@ def add_notification_record(notification_type, item_name, quantity, amount):
         "type": notification_type,
         "item_name": display_name,
         "quantity": int(quantity),
-        "amount": int(amount)
+        "amount": int(amount),
+        "session_id": str(session_id or "") or None,
     }
 
     notification_history.insert(0, record)
     save_web_store()
 
 
-def delete_notification_record(notification_id):
-    """指定したIDの通知履歴を1件だけ削除する。"""
-    global notification_history
+def delete_records_by_session_id(session_id):
+    """
+    指定したsession_idに紐づく通知履歴・売上履歴を削除する。
 
-    notification_id = str(notification_id or "").strip()
-    if not notification_id:
+    sessionsフォルダから該当セッションフォルダが自動削除された時に、
+    Web表示の履歴も同期して消すために使う（証拠データが消えた履歴を
+    表示に残さないため）。
+    """
+    global sales_history, notification_history
+
+    session_id = str(session_id or "").strip()
+    if not session_id:
         return False
 
-    before = len(notification_history)
-    notification_history = [
-        record for record in notification_history
-        if str(record.get("id", "")) != notification_id
+    before_sales = len(sales_history)
+    sales_history = [
+        record for record in sales_history
+        if record.get("session_id") != session_id
     ]
 
-    if len(notification_history) == before:
-        return False
+    before_notifications = len(notification_history)
+    notification_history = [
+        record for record in notification_history
+        if record.get("session_id") != session_id
+    ]
 
-    save_web_store()
-    return True
+    changed = (
+        len(sales_history) != before_sales
+        or len(notification_history) != before_notifications
+    )
 
+    if changed:
+        save_web_store()
 
-def clear_notification_history():
-    """通知履歴を全件削除する。"""
-    global notification_history
-    notification_history = []
-    save_web_store()
-    return True
+    return changed
 
 
 def add_ai_history_record(item_name, count):

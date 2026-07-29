@@ -683,8 +683,7 @@ button { cursor: pointer; }
     grid-template-columns: minmax(520px, 0.95fr) minmax(420px, 1.05fr);
     grid-template-areas:
         "farm form"
-        "history form"
-        "list form";
+        "history list";
     gap: 22px;
     align-items: start;
 }

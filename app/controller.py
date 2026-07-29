@@ -692,17 +692,16 @@ class _LivePaymentMonitor:
                             coin_weight_diff = actual_increase - expected_coin_weight
                             new_coin_weight_ok = abs(coin_weight_diff) <= COIN_WEIGHT_MARGIN
 
-                            if (
-                                self._paid_coins
-                                and not new_coin_weight_ok
-                                and new_coin_weight_ok != self._coin_weight_ok
-                            ):
+                            if self._paid_coins and new_coin_weight_ok != self._coin_weight_ok:
                                 print(
                                     "[Controller] コイン重量デバッグ: "
+                                    f"投入コイン={self._paid_coins} / "
                                     f"想定重量={expected_coin_weight:.1f}g / "
+                                    f"現在コイン重量={current_coin_weight:.1f}g / "
+                                    f"入店時コイン重量={self.before_coin_weight:.1f}g / "
                                     f"実測増加={actual_increase:.1f}g / "
                                     f"差={coin_weight_diff:+.1f}g "
-                                    f"(許容±{COIN_WEIGHT_MARGIN}g) / 判定OK=False"
+                                    f"(許容±{COIN_WEIGHT_MARGIN}g) / 判定OK={new_coin_weight_ok}"
                                 )
 
                             self._coin_weight_ok = new_coin_weight_ok

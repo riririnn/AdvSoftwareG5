@@ -604,6 +604,7 @@ class _LivePaymentMonitor:
         if (
             self._image_payment_confirmed
             and not self._coin_weight_confirmed
+            and self._paid_coins
             and self._coin_weight_ok
         ):
             self._coin_weight_confirmed = True

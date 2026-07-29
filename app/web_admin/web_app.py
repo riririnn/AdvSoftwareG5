@@ -1199,6 +1199,34 @@ def purge_expired_sessions():
     return deleted_count > 0
 
 
+def purge_orphaned_history_records():
+    """
+    売上履歴・通知履歴のうち、対応するsessionフォルダがもう存在しないものを削除する。
+
+    purge_expired_sessions()による自動削除だけでなく、手動で
+    `rm -rf sessions/<id>` 等により消された場合も、Web表示の履歴が
+    存在しないセッションを指したまま残り続けないようにするための
+    保険的な同期処理。session_idを持たない古い形式の履歴は対象外。
+    """
+    session_ids_to_remove = set()
+
+    for record in get_sales_history() + get_notification_history():
+        session_id = record.get("session_id")
+        if not session_id:
+            continue
+
+        if not (SESSIONS_DIR / session_id).exists():
+            session_ids_to_remove.add(session_id)
+
+    removed_any = False
+    for session_id in session_ids_to_remove:
+        if delete_records_by_session_id(session_id):
+            removed_any = True
+            print(f"通知・売上履歴の同期: sessionフォルダが存在しない{session_id}の履歴を削除しました。")
+
+    return removed_any
+
+
 def watch_sessions_loop():
     global _last_purge_time
     print("sessions自動監視を開始しました:", SESSIONS_DIR)
@@ -1216,6 +1244,7 @@ def watch_sessions_loop():
             if time.time() - _last_purge_time >= PURGE_INTERVAL_SEC:
                 purge_expired_notification_history()
                 purge_expired_sessions()
+                purge_orphaned_history_records()
                 _last_purge_time = time.time()
 
         except Exception as error:
@@ -1773,6 +1802,22 @@ def api_sync_web_histories_from_sessions():
         "status": "success",
         "message": "sessionsフォルダの内容からWebの売上履歴・通知履歴を同期しました。",
         "result": result
+    })
+
+
+@app.route("/api/session/purge-orphaned-history", methods=["POST"])
+def api_purge_orphaned_history():
+    removed_any = purge_orphaned_history_records()
+
+    return jsonify({
+        "status": "success",
+        "message": (
+            "存在しないsessionの履歴を削除しました。" if removed_any
+            else "削除対象の履歴はありませんでした。"
+        ),
+        "removed": removed_any,
+        "sales": get_sales_history(),
+        "notifications": get_notification_history()
     })
 
 

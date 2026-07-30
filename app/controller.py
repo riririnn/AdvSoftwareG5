@@ -564,11 +564,11 @@ class _LivePaymentMonitor:
 
             required = self._required_amount
             paid = self._paid_amount
-            item_taken = self._item_taken
+            item_missing = self._weight_judged
             image_payment_confirmed = self._image_payment_confirmed
             confirmed = self._transaction_confirmed
 
-        self._apply_indicator(required, paid, item_taken, image_payment_confirmed, confirmed)
+        self._apply_indicator(required, paid, item_missing, image_payment_confirmed, confirmed)
 
     def remove_coins(self, coins: list[int]):
         """トレイから取り除かれた硬貨の分だけ、投入済み金額を減らす。"""
@@ -587,11 +587,11 @@ class _LivePaymentMonitor:
                     pass
             required = self._required_amount
             paid = self._paid_amount
-            item_taken = self._item_taken
+            item_missing = self._weight_judged
             image_payment_confirmed = self._image_payment_confirmed
             confirmed = self._transaction_confirmed
 
-        self._apply_indicator(required, paid, item_taken, image_payment_confirmed, confirmed)
+        self._apply_indicator(required, paid, item_missing, image_payment_confirmed, confirmed)
 
     def _check_progress_locked(self):
         """
@@ -634,11 +634,13 @@ class _LivePaymentMonitor:
                     f"投入{self._paid_amount}円 → 取引確定。"
                 )
 
-    def _apply_indicator(self, required: int, paid: int, item_taken: bool, image_payment_confirmed: bool, confirmed: bool):
-        # 白LED: 商品未取得の間ON。赤LED: 商品取得後、STEP2(画像認識で支払い確認)まではON。
+    def _apply_indicator(self, required: int, paid: int, item_missing: bool, image_payment_confirmed: bool, confirmed: bool):
+        # 白LED: 現在の重量が入店時と変わらない（商品を持っていない）間ON。
+        # 商品を取って重量が減っている間はOFF（戻せば白に戻る、STEP1の確定とは別判定）。
+        # 赤LED: 商品を持ち出している間、STEP2(画像認識で支払い確認)まではON。
         # 黄LED: 支払い確認済み・重量判定待ちの間ON。緑LED: STEP4(取引確定)でON。
         indicator_show_live_status(
-            item_taken=item_taken,
+            item_taken=item_missing,
             payment_ok=image_payment_confirmed,
             weight_ok=confirmed,
             required_amount=required,
@@ -727,11 +729,11 @@ class _LivePaymentMonitor:
 
                     required = self._required_amount
                     paid = self._paid_amount
-                    item_taken = self._item_taken
+                    item_missing = self._weight_judged
                     image_payment_confirmed = self._image_payment_confirmed
                     confirmed = self._transaction_confirmed
 
-                self._apply_indicator(required, paid, item_taken, image_payment_confirmed, confirmed)
+                self._apply_indicator(required, paid, item_missing, image_payment_confirmed, confirmed)
                 self._last_error = None
 
             except Exception as error:

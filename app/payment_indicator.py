@@ -63,7 +63,8 @@ def setup() -> bool:
 
     try:
         _white_led = LED(WHITE_LED_PIN)
-        _red_led = LED(RED_LED_PIN)
+        # 赤LEDのみ配線の極性が逆（アクティブLow）のため、論理を反転させる。
+        _red_led = LED(RED_LED_PIN, active_high=False)
         _green_led = LED(GREEN_LED_PIN)
         _yellow_led = LED(YELLOW_LED_PIN)
         _buzzer = Buzzer(BUZZER_PIN)

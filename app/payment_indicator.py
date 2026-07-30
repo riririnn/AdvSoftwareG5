@@ -208,11 +208,13 @@ def show_live_status(
     - item_takenは現在の重量が入店時と比べて減っているか（商品を持ち出し中か）
       をその都度示す値。商品を戻して重量が入店時相当に戻れば、支払い確定前なら
       いつでも白LEDに戻る（一度取ったら戻らないSTEP1の確定判定とは別物）。
-    - 商品を持ち出している間は白LEDを消し、赤LEDをつける。
-    - 画像処理（コイン認識）で必要金額以上の投入を確認できたら赤LEDを消す。
+    - 白LED・赤LEDは支払い確認（payment_ok）前だけが対象。支払い確認後は
+      白も赤も消灯し、黄LED（測定中）・緑LED（重量判定OK）のみで表示する。
+    - 商品を持ち出している間（支払い確認前）は白LEDを消し、赤LEDをつける。
+    - 画像処理（コイン認識）で必要金額以上の投入を確認できたら赤LED・白LEDを消す。
     - 重量判定で商品の重量減少が有効に確認できたら緑LEDをつける。
-    - 赤LEDが消えていて（支払いは確認済み）緑LEDがまだつかない（重量判定が
-      まだ確定していない）間は、重量測定中であることを示す黄LEDをつける。
+    - 支払いは確認済み・重量判定がまだ確定していない間は、重量測定中であることを
+      示す黄LEDをつける。
     - 従来のように「片方だけがON」とは限らない（両方OFF/両方ONもありうる）。
     """
     global _last_display_signature
@@ -222,6 +224,8 @@ def show_live_status(
     payment_ok = bool(payment_ok)
     weight_ok = bool(weight_ok)
     measuring = payment_ok and not weight_ok
+    white_on = not item_taken and not payment_ok
+    red_on = item_taken and not payment_ok
     signature = (
         "live",
         item_taken,
@@ -233,15 +237,15 @@ def show_live_status(
 
     with _lock:
         if _white_led:
-            if item_taken:
-                _white_led.off()
-            else:
+            if white_on:
                 _white_led.on()
-        if _red_led:
-            if not item_taken or payment_ok:
-                _red_led.off()
             else:
+                _white_led.off()
+        if _red_led:
+            if red_on:
                 _red_led.on()
+            else:
+                _red_led.off()
         if _green_led:
             if weight_ok:
                 _green_led.on()
@@ -257,9 +261,8 @@ def show_live_status(
         print(
             "[PaymentIndicator] ライブ状態: "
             f"必要{required_amount}円 / 投入{paid_amount}円 / "
-            f"商品取得={item_taken}（白LED{'OFF' if item_taken else 'ON'}） / "
-            f"支払いOK={payment_ok}（赤LED"
-            f"{'OFF' if (not item_taken or payment_ok) else 'ON'}） / "
+            f"商品取得={item_taken}（白LED{'ON' if white_on else 'OFF'}） / "
+            f"支払いOK={payment_ok}（赤LED{'ON' if red_on else 'OFF'}） / "
             f"重量判定OK={weight_ok}（緑LED{'ON' if weight_ok else 'OFF'}） / "
             f"重量測定中={measuring}（黄LED{'ON' if measuring else 'OFF'}）"
         )

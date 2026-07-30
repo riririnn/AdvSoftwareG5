@@ -507,7 +507,8 @@ class _LivePaymentMonitor:
         self._coin_weight_ok = self.before_coin_weight is None
 
         # STEP1: 商品を取ったこと（重量減少）を検知したか。
-        # 一度Trueになったら戻さない。ここが確定するまでコイン認識は行わない。
+        # ここが確定するまでコイン認識は行わない。取引確定前に商品を棚へ
+        # 戻す（重量が入店時相当に戻る）と、STEP1〜3の状態ごとFalseへ戻す。
         self._item_taken = False
 
         # STEP2: 画像認識（コイン投入）で必要金額以上の支払いを確認できたか。
@@ -682,6 +683,22 @@ class _LivePaymentMonitor:
                 with self._lock:
                     if not self._transaction_confirmed:
                         self._weight_judged = weight_judged
+
+                        if self._item_taken and not weight_judged:
+                            # 商品を棚に戻した（重量が入店時相当に戻った）ので、
+                            # STEP1〜3の状態をリセットする。再び取ったときは
+                            # 画像認識による支払い確認からやり直しになる。
+                            self._item_taken = False
+                            self._image_payment_confirmed = False
+                            self._paid_amount = 0
+                            self._paid_coins = []
+                            self._coin_weight_confirmed = False
+                            self._coin_weight_ok = self.before_coin_weight is None
+                            self._required_amount = 0
+                            print(
+                                "[Controller] 商品を棚に戻しました。"
+                                "支払い確認状態をリセットします。"
+                            )
 
                         if not self._item_taken:
                             if weight_judged:

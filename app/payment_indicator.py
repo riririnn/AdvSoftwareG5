@@ -206,15 +206,14 @@ def show_live_status(
     来客中のリアルタイム表示。白LED・赤LED・緑LED・黄LEDを制御する。
 
     - item_takenは現在の重量が入店時と比べて減っているか（商品を持ち出し中か）
-      をその都度示す値。商品を戻して重量が入店時相当に戻れば、支払い確定前なら
-      いつでも白LEDに戻る（一度取ったら戻らないSTEP1の確定判定とは別物）。
-    - 白LED・赤LEDは支払い確認（payment_ok）前だけが対象。支払い確認後は
-      白も赤も消灯し、黄LED（測定中）・緑LED（重量判定OK）のみで表示する。
-    - 商品を持ち出している間（支払い確認前）は白LEDを消し、赤LEDをつける。
-    - 画像処理（コイン認識）で必要金額以上の投入を確認できたら赤LED・白LEDを消す。
+      をその都度示す値。支払い確認の前でも後でも、商品を戻して重量が入店時
+      相当に戻ればいつでも白LEDに戻る（一度取ったら戻らないSTEP1の確定判定
+      とは別物）。
+    - 商品を持ち出している間、支払い未確認なら赤LED、支払い確認済み・
+      重量判定待ちなら黄LEDをつける（白LEDは消す）。
+    - 商品を戻して重量が入店時相当に戻れば、支払い確認状態によらず
+      赤LED・黄LEDを消して白LEDに戻す。
     - 重量判定で商品の重量減少が有効に確認できたら緑LEDをつける。
-    - 支払いは確認済み・重量判定がまだ確定していない間は、重量測定中であることを
-      示す黄LEDをつける。
     - 従来のように「片方だけがON」とは限らない（両方OFF/両方ONもありうる）。
     """
     global _last_display_signature
@@ -223,8 +222,8 @@ def show_live_status(
     item_taken = bool(item_taken)
     payment_ok = bool(payment_ok)
     weight_ok = bool(weight_ok)
-    measuring = payment_ok and not weight_ok
-    white_on = not item_taken and not payment_ok
+    measuring = payment_ok and not weight_ok and item_taken
+    white_on = not item_taken
     red_on = item_taken and not payment_ok
     signature = (
         "live",

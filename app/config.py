@@ -123,6 +123,7 @@ PAYMENT_LED_UPDATE_INTERVAL = 1.5
 # ==========================================
 
 # GPIOはcontroller.pyだけが所有する。Web管理画面から同じGPIOを開かない。
+WHITE_LED_PIN = 5
 RED_LED_PIN = 17
 GREEN_LED_PIN = 27
 YELLOW_LED_PIN = 25

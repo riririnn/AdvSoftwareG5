@@ -74,6 +74,7 @@ from payment_indicator import (
     show_pending as indicator_show_pending,
     show_paid as indicator_show_paid,
     show_theft as indicator_show_theft,
+    show_unconfirmed as indicator_show_unconfirmed,
     show_live_status as indicator_show_live_status,
     cleanup as cleanup_payment_indicator,
 )
@@ -526,7 +527,9 @@ class _LivePaymentMonitor:
         self._last_error = None
 
     def start(self):
-        indicator_show_live_status(payment_ok=False, weight_ok=False, required_amount=0, paid_amount=0)
+        indicator_show_live_status(
+            item_taken=False, payment_ok=False, weight_ok=False, required_amount=0, paid_amount=0
+        )
         self._thread.start()
 
     def is_item_taken(self) -> bool:
@@ -561,10 +564,11 @@ class _LivePaymentMonitor:
 
             required = self._required_amount
             paid = self._paid_amount
+            item_taken = self._item_taken
             image_payment_confirmed = self._image_payment_confirmed
             confirmed = self._transaction_confirmed
 
-        self._apply_indicator(required, paid, image_payment_confirmed, confirmed)
+        self._apply_indicator(required, paid, item_taken, image_payment_confirmed, confirmed)
 
     def remove_coins(self, coins: list[int]):
         """トレイから取り除かれた硬貨の分だけ、投入済み金額を減らす。"""
@@ -583,10 +587,11 @@ class _LivePaymentMonitor:
                     pass
             required = self._required_amount
             paid = self._paid_amount
+            item_taken = self._item_taken
             image_payment_confirmed = self._image_payment_confirmed
             confirmed = self._transaction_confirmed
 
-        self._apply_indicator(required, paid, image_payment_confirmed, confirmed)
+        self._apply_indicator(required, paid, item_taken, image_payment_confirmed, confirmed)
 
     def _check_progress_locked(self):
         """
@@ -629,9 +634,11 @@ class _LivePaymentMonitor:
                     f"投入{self._paid_amount}円 → 取引確定。"
                 )
 
-    def _apply_indicator(self, required: int, paid: int, image_payment_confirmed: bool, confirmed: bool):
-        # 赤LED: STEP2(画像認識で支払い確認)でOFF。緑LED: STEP4(取引確定)でON。
+    def _apply_indicator(self, required: int, paid: int, item_taken: bool, image_payment_confirmed: bool, confirmed: bool):
+        # 白LED: 商品未取得の間ON。赤LED: 商品取得後、STEP2(画像認識で支払い確認)まではON。
+        # 黄LED: 支払い確認済み・重量判定待ちの間ON。緑LED: STEP4(取引確定)でON。
         indicator_show_live_status(
+            item_taken=item_taken,
             payment_ok=image_payment_confirmed,
             weight_ok=confirmed,
             required_amount=required,
@@ -720,10 +727,11 @@ class _LivePaymentMonitor:
 
                     required = self._required_amount
                     paid = self._paid_amount
+                    item_taken = self._item_taken
                     image_payment_confirmed = self._image_payment_confirmed
                     confirmed = self._transaction_confirmed
 
-                self._apply_indicator(required, paid, image_payment_confirmed, confirmed)
+                self._apply_indicator(required, paid, item_taken, image_payment_confirmed, confirmed)
                 self._last_error = None
 
             except Exception as error:
@@ -824,7 +832,7 @@ class Controller:
 
             print("\nCustomer detected.")
 
-            # 人を検知した時点から、支払い完了までは赤LEDを点灯する。
+            # 人を検知した時点から、商品を取るまでは白LEDを点灯する。
             indicator_show_pending(0, 0)
 
             # コインの新規投入判定をセッションごとにリセット
@@ -1041,7 +1049,7 @@ class Controller:
             else:
                 # 判定不能時は誤って緑にしない。赤LEDで要確認を示すが、
                 # 万引き確定ではないためブザーは鳴らさない。
-                indicator_show_pending(purchase_amount, paid_amount)
+                indicator_show_unconfirmed(purchase_amount, paid_amount)
 
             print()
             print("Session finished.")

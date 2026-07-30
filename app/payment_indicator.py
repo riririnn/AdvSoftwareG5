@@ -5,8 +5,9 @@ GPIOの所有者を controller.py の1プロセスに限定し、Flask側との�
 ファイルへの状態書き込みは行わないため、root/一般ユーザー間の権限問題も発生しない。
 
 動作:
-- 待機中: 赤LED OFF / 緑LED OFF / 黄LED OFF / ブザー OFF
-- 来客中・不足中: 赤LED ON / 緑LED OFF / 黄LED OFF
+- 待機中: 白LED OFF / 赤LED OFF / 緑LED OFF / 黄LED OFF / ブザー OFF
+- 来客検知中・商品未取得: 白LED ON / 赤LED OFF / 緑LED OFF / 黄LED OFF
+- 商品取得後・支払い未確認: 白LED OFF / 赤LED ON / 緑LED OFF / 黄LED OFF
 - 重量測定中（支払いは確認済み・重量判定はまだ）: 赤LED OFF / 緑LED OFF / 黄LED ON
 - 支払い完了: 赤LED OFF / 緑LED ON / 黄LED OFF
 - 退店後の未払い確定: 赤LED ON / 緑LED OFF / 黄LED OFF / ブザー ON
@@ -18,6 +19,7 @@ from __future__ import annotations
 import threading
 
 from config import (
+    WHITE_LED_PIN,
     RED_LED_PIN,
     GREEN_LED_PIN,
     YELLOW_LED_PIN,
@@ -34,6 +36,7 @@ except Exception:
 
 
 _lock = threading.RLock()
+_white_led = None
 _red_led = None
 _green_led = None
 _yellow_led = None
@@ -46,7 +49,7 @@ _last_display_signature = None
 
 def setup() -> bool:
     """GPIOを初期化する。PC等では無効化して処理を継続する。"""
-    global _red_led, _green_led, _yellow_led, _buzzer, _confirm_button, _available
+    global _white_led, _red_led, _green_led, _yellow_led, _buzzer, _confirm_button, _available
 
     if _available:
         return True
@@ -59,6 +62,7 @@ def setup() -> bool:
         return False
 
     try:
+        _white_led = LED(WHITE_LED_PIN)
         _red_led = LED(RED_LED_PIN)
         _green_led = LED(GREEN_LED_PIN)
         _yellow_led = LED(YELLOW_LED_PIN)
@@ -74,6 +78,7 @@ def setup() -> bool:
 
         print(
             "[PaymentIndicator] 初期化しました。"
+            f"白LED=GPIO{WHITE_LED_PIN}, "
             f"赤LED=GPIO{RED_LED_PIN}, "
             f"緑LED=GPIO{GREEN_LED_PIN}, "
             f"黄LED=GPIO{YELLOW_LED_PIN}, "
@@ -93,6 +98,8 @@ def show_idle(*, reset_buzzer: bool = False) -> None:
     global _buzzer_alert_active, _last_display_signature
 
     with _lock:
+        if _white_led:
+            _white_led.off()
         if _red_led:
             _red_led.off()
         if _green_led:
@@ -106,13 +113,43 @@ def show_idle(*, reset_buzzer: bool = False) -> None:
 
 
 def show_pending(required_amount: int = 0, paid_amount: int = 0) -> None:
-    """来客中または支払い不足中。赤LEDを点灯する。"""
+    """来客検知中・商品未取得。白LEDを点灯する。"""
     global _last_display_signature
     required_amount = int(required_amount)
     paid_amount = int(paid_amount)
     signature = ("pending", required_amount, paid_amount)
 
     with _lock:
+        if _white_led:
+            _white_led.on()
+        if _red_led:
+            _red_led.off()
+        if _green_led:
+            _green_led.off()
+        if _yellow_led:
+            _yellow_led.off()
+
+    shortage = max(0, required_amount - paid_amount)
+    if signature != _last_display_signature:
+        print(
+            "[PaymentIndicator] 来客検知: "
+            f"必要{required_amount}円 / "
+            f"投入{paid_amount}円 / "
+            f"不足{shortage}円 / 白LED ON"
+        )
+        _last_display_signature = signature
+
+
+def show_unconfirmed(required_amount: int = 0, paid_amount: int = 0) -> None:
+    """退店後、万引き判定が確定できなかった状態。赤LEDを点灯し要確認を示す。"""
+    global _last_display_signature
+    required_amount = int(required_amount)
+    paid_amount = int(paid_amount)
+    signature = ("unconfirmed", required_amount, paid_amount)
+
+    with _lock:
+        if _white_led:
+            _white_led.off()
         if _red_led:
             _red_led.on()
         if _green_led:
@@ -123,7 +160,7 @@ def show_pending(required_amount: int = 0, paid_amount: int = 0) -> None:
     shortage = max(0, required_amount - paid_amount)
     if signature != _last_display_signature:
         print(
-            "[PaymentIndicator] 支払い待ち: "
+            "[PaymentIndicator] 判定不能: "
             f"必要{required_amount}円 / "
             f"投入{paid_amount}円 / "
             f"不足{shortage}円 / 赤LED ON"
@@ -139,6 +176,8 @@ def show_paid(required_amount: int = 0, paid_amount: int = 0) -> None:
     signature = ("paid", required_amount, paid_amount)
 
     with _lock:
+        if _white_led:
+            _white_led.off()
         if _red_led:
             _red_led.off()
         if _green_led:
@@ -157,14 +196,17 @@ def show_paid(required_amount: int = 0, paid_amount: int = 0) -> None:
 
 def show_live_status(
     *,
+    item_taken: bool,
     payment_ok: bool,
     weight_ok: bool,
     required_amount: int = 0,
     paid_amount: int = 0,
 ) -> None:
     """
-    来客中のリアルタイム表示。赤LED・緑LED・黄LEDを制御する。
+    来客中のリアルタイム表示。白LED・赤LED・緑LED・黄LEDを制御する。
 
+    - 商品がまだ取られていない間は白LEDをつける（来客検知中の表示を維持）。
+    - 商品を取ったら白LEDを消し、赤LEDをつける。
     - 画像処理（コイン認識）で必要金額以上の投入を確認できたら赤LEDを消す。
     - 重量判定で商品の重量減少が有効に確認できたら緑LEDをつける。
     - 赤LEDが消えていて（支払いは確認済み）緑LEDがまだつかない（重量判定が
@@ -174,14 +216,27 @@ def show_live_status(
     global _last_display_signature
     required_amount = int(required_amount)
     paid_amount = int(paid_amount)
+    item_taken = bool(item_taken)
     payment_ok = bool(payment_ok)
     weight_ok = bool(weight_ok)
     measuring = payment_ok and not weight_ok
-    signature = ("live", payment_ok, weight_ok, required_amount, paid_amount)
+    signature = (
+        "live",
+        item_taken,
+        payment_ok,
+        weight_ok,
+        required_amount,
+        paid_amount,
+    )
 
     with _lock:
+        if _white_led:
+            if item_taken:
+                _white_led.off()
+            else:
+                _white_led.on()
         if _red_led:
-            if payment_ok:
+            if not item_taken or payment_ok:
                 _red_led.off()
             else:
                 _red_led.on()
@@ -200,7 +255,9 @@ def show_live_status(
         print(
             "[PaymentIndicator] ライブ状態: "
             f"必要{required_amount}円 / 投入{paid_amount}円 / "
-            f"支払いOK={payment_ok}（赤LED{'OFF' if payment_ok else 'ON'}） / "
+            f"商品取得={item_taken}（白LED{'OFF' if item_taken else 'ON'}） / "
+            f"支払いOK={payment_ok}（赤LED"
+            f"{'OFF' if (not item_taken or payment_ok) else 'ON'}） / "
             f"重量判定OK={weight_ok}（緑LED{'ON' if weight_ok else 'OFF'}） / "
             f"重量測定中={measuring}（黄LED{'ON' if measuring else 'OFF'}）"
         )
@@ -212,6 +269,8 @@ def show_theft(shortage: int = 0) -> None:
     global _buzzer_alert_active, _last_display_signature
 
     with _lock:
+        if _white_led:
+            _white_led.off()
         if _red_led:
             _red_led.on()
         if _green_led:
@@ -246,11 +305,18 @@ def stop_buzzer() -> None:
 
 def cleanup() -> None:
     """GPIOデバイスを安全に解放する。"""
-    global _red_led, _green_led, _yellow_led, _buzzer, _confirm_button
+    global _white_led, _red_led, _green_led, _yellow_led, _buzzer, _confirm_button
     global _available, _buzzer_alert_active, _last_display_signature
 
     with _lock:
-        devices = (_confirm_button, _buzzer, _yellow_led, _green_led, _red_led)
+        devices = (
+            _confirm_button,
+            _buzzer,
+            _yellow_led,
+            _green_led,
+            _red_led,
+            _white_led,
+        )
         for device in devices:
             if device is not None:
                 try:
@@ -258,6 +324,7 @@ def cleanup() -> None:
                 except Exception:
                     pass
 
+        _white_led = None
         _red_led = None
         _green_led = None
         _yellow_led = None
